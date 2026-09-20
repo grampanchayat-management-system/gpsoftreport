@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17356a">
+<title>GP Software — मोबाईल</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#ffffff; --primary:#17356a; --primary-2:#2a5298;
+    --text:#1b2333; --muted:#6b7688; --border:#e3e7f0; --danger:#c0392b; --success:#1f9d55;
+    box-sizing:border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1420; --card:#161d2e; --text:#eef1f8; --muted:#9aa4bd; --border:#2a3348;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; margin:0;}
+  body{
+    font-family:'Noto Sans Devanagari','Noto Sans',system-ui,-apple-system,Roboto,sans-serif;
+    background:var(--bg); color:var(--text);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:480px; margin:0 auto; padding:16px 16px 90px;}
+  header{
+    position:sticky; top:0; padding-top: env(safe-area-inset-top, 0px);
+    background:linear-gradient(135deg,var(--primary),var(--primary-2));
+    color:#fff; padding:18px 16px; text-align:center; z-index:10;
+    box-shadow:0 2px 10px rgba(0,0,0,.15);
+  }
+  header h1{margin:0; font-size:20px;}
+  header p{margin:4px 0 0; font-size:12px; opacity:.85;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:18px; margin-top:16px; box-shadow:0 1px 4px rgba(0,0,0,.04);
+  }
+  label{display:block; font-size:13px; color:var(--muted); margin:10px 0 4px;}
+  input, select{
+    width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--border);
+    background:transparent; color:var(--text); font-size:15px; font-family:inherit;
+  }
+  input:focus, select:focus{outline:none; border-color:var(--primary-2);}
+  button{
+    width:100%; padding:13px; border:none; border-radius:10px; font-size:15px;
+    font-weight:600; margin-top:16px; cursor:pointer; font-family:inherit;
+  }
+  .btn-primary{background:var(--primary); color:#fff;}
+  .btn-primary:active{opacity:.85;}
+  .btn-secondary{background:transparent; color:var(--primary-2); border:1px solid var(--primary-2);}
+  .tabs{display:flex; gap:8px; margin-top:16px;}
+  .tab{
+    flex:1; text-align:center; padding:10px; border-radius:10px; font-size:14px;
+    background:var(--card); border:1px solid var(--border); color:var(--muted); cursor:pointer;
+  }
+  .tab.active{background:var(--primary); color:#fff; border-color:var(--primary);}
+  .hidden{display:none !important;}
+  .msg{font-size:13px; margin-top:10px; text-align:center;}
+  .msg.err{color:var(--danger);}
+  .msg.ok{color:var(--success);}
+  .entry{
+    border:1px solid var(--border); border-radius:10px; padding:12px; margin-top:10px; font-size:14px;
+  }
+  .entry .top{display:flex; justify-content:space-between; font-weight:600; color:var(--primary-2);}
+  .entry .sub{color:var(--muted); font-size:12px; margin-top:2px;}
+  .section-title{font-size:15px; font-weight:700; margin:20px 0 6px; color:var(--primary-2);}
+  .topbar{display:flex; justify-content:space-between; align-items:center;}
+  .logout{font-size:12px; color:#fff; opacity:.85; text-decoration:underline; cursor:pointer; background:none; border:none; width:auto; margin:0; padding:0;}
+  .spinner{display:inline-block; width:16px; height:16px; border:2px solid #fff; border-top-color:transparent; border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="topbar">
+    <div>
+      <h1>GP Software</h1>
+      <p>मोबाईल — live एन्ट्री</p>
+    </div>
+    <button id="logoutBtn" class="logout hidden">लॉगआऊट</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- LOGIN -->
+  <div id="loginCard" class="card">
+    <div class="section-title" style="margin-top:0">लॉगिन करा</div>
+    <label>Email</label>
+    <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="username">
+    <label>Password</label>
+    <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
+    <button class="btn-primary" id="loginBtn">लॉगिन</button>
+    <div id="loginMsg" class="msg"></div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="appArea" class="hidden">
+
+    <div class="tabs">
+      <div class="tab active" data-tab="receipt">पावती</div>
+      <div class="tab" data-tab="key">चावी नंबर</div>
+      <div class="tab" data-tab="list">Live यादी</div>
+    </div>
+
+    <!-- RECEIPT FORM -->
+    <div id="tab-receipt" class="card">
+      <div class="section-title" style="margin-top:0">नवीन पावती</div>
+      <label>पावती क्रमांक (आपोआप)</label>
+      <input type="text" id="rNo" disabled placeholder="लोड होत आहे...">
+      <label>तारीख</label>
+      <input type="date" id="rDate">
+      <label>नाव</label>
+      <input type="text" id="rName" placeholder="पूर्ण नाव">
+      <label>गाव</label>
+      <input type="text" id="rVillage" placeholder="गावाचे नाव">
+      <label>तालुका</label>
+      <input type="text" id="rTaluka" placeholder="तालुका">
+      <label>जिल्हा</label>
+      <input type="text" id="rJilha" placeholder="जिल्हा">
+      <label>मोबाईल</label>
+      <input type="tel" id="rMobile" placeholder="10 अंकी मोबाईल नंबर">
+      <label>रक्कम (₹)</label>
+      <input type="number" id="rAmount" placeholder="0">
+      <label>भरण्याचा प्रकार</label>
+      <select id="rPayType">
+        <option>रोख</option>
+        <option>ऑनलाइन</option>
+        <option>चेक</option>
+      </select>
+      <button class="btn-primary" id="saveReceiptBtn">पावती सेव्ह करा</button>
+      <div id="receiptMsg" class="msg"></div>
+    </div>
+
+    <!-- KEY NUMBER FORM -->
+    <div id="tab-key" class="card hidden">
+      <div class="section-title" style="margin-top:0">नवीन चावी नंबर</div>
+      <label>चावी क्रमांक</label>
+      <input type="text" id="kNo" placeholder="उदा. 145">
+      <label>मालकाचे नाव (भोगवटादार)</label>
+      <input type="text" id="kOwner" placeholder="पूर्ण नाव">
+      <label>गाव</label>
+      <input type="text" id="kVillage" placeholder="गावाचे नाव">
+      <label>टीप (ऐच्छिक)</label>
+      <input type="text" id="kNote" placeholder="काही नोंद असल्यास">
+      <button class="btn-primary" id="saveKeyBtn">चावी नंबर सेव्ह करा</button>
+      <div id="keyMsg" class="msg"></div>
+    </div>
+
+    <!-- LIVE LIST -->
+    <div id="tab-list" class="card hidden">
+      <div class="section-title" style="margin-top:0">अलीकडील एन्ट्री (live)</div>
+      <div id="liveList"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="lib/firebase-app-compat.js"></script>
+<script src="lib/firebase-auth-compat.js"></script>
+<script src="lib/firebase-firestore-compat.js"></script>
+<script>
+(function(){
+  var firebaseConfig = {
+    apiKey: "AIzaSyAu0fXj2aRVW0G1sx7hxMdFh44M7DHTjUk",
+    authDomain: "gp-software-live.firebaseapp.com",
+    projectId: "gp-software-live",
+    storageBucket: "gp-software-live.firebasestorage.app",
+    messagingSenderId: "671771279337",
+    appId: "1:671771279337:web:9b3d90c477fe73e4271578"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  var auth = firebase.auth();
+  var db = firebase.firestore();
+
+  var loginCard = document.getElementById('loginCard');
+  var appArea = document.getElementById('appArea');
+  var logoutBtn = document.getElementById('logoutBtn');
+  var loginMsg = document.getElementById('loginMsg');
+
+  function showMsg(el, text, ok){
+    el.textContent = text;
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  document.getElementById('loginBtn').addEventListener('click', function(){
+    var email = document.getElementById('loginEmail').value.trim();
+    var pass = document.getElementById('loginPass').value;
+    if(!email || !pass){
+      showMsg(loginMsg, 'Email आणि Password टाका', false);
+      return;
+    }
+    loginMsg.textContent = '';
+    auth.signInWithEmailAndPassword(email, pass).catch(function(err){
+      showMsg(loginMsg, 'लॉगिन चूक: ' + err.message, false);
+    });
+  });
+
+  logoutBtn.addEventListener('click', function(){
+    auth.signOut();
+  });
+
+  auth.onAuthStateChanged(function(user){
+    if(user){
+      loginCard.classList.add('hidden');
+      appArea.classList.remove('hidden');
+      logoutBtn.classList.remove('hidden');
+      initReceiptNumber();
+      startLiveList();
+    } else {
+      loginCard.classList.remove('hidden');
+      appArea.classList.add('hidden');
+      logoutBtn.classList.add('hidden');
+    }
+  });
+
+  // ---- Tabs ----
+  var tabs = document.querySelectorAll('.tab');
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){
+      tabs.forEach(function(x){ x.classList.remove('active'); });
+      t.classList.add('active');
+      document.getElementById('tab-receipt').classList.add('hidden');
+      document.getElementById('tab-key').classList.add('hidden');
+      document.getElementById('tab-list').classList.add('hidden');
+      document.getElementById('tab-' + t.dataset.tab).classList.remove('hidden');
+    });
+  });
+
+  // ---- Receipt number (shared counter, avoids duplicates with desktop) ----
+  var counterRef = db.collection('meta').doc('counters');
+
+  function initReceiptNumber(){
+    counterRef.get().then(function(doc){
+      var n = 1;
+      if(doc.exists && doc.data().nextReceiptNo){
+        n = doc.data().nextReceiptNo;
+      }
+      document.getElementById('rNo').value = 'GPS-2026-' + String(n).padStart(3, '0');
+    });
+    var today = new Date().toISOString().slice(0,10);
+    document.getElementById('rDate').value = today;
+  }
+
+  document.getElementById('saveReceiptBtn').addEventListener('click', function(){
+    var btn = this;
+    var name = document.getElementById('rName').value.trim();
+    var amount = document.getElementById('rAmount').value;
+    if(!name || !amount){
+      showMsg(document.getElementById('receiptMsg'), 'नाव आणि रक्कम भरणे आवश्यक आहे', false);
+      return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> सेव्ह होत आहे...';
+
+    db.runTransaction(function(tx){
+      return tx.get(counterRef).then(function(doc){
+        var n = 1;
+        if(doc.exists && doc.data().nextReceiptNo){
+          n = doc.data().nextReceiptNo;
+        }
+        var receiptNo = 'GPS-2026-' + String(n).padStart(3, '0');
+        var record = {
+          no: receiptNo,
+          date: document.getElementById('rDate').value,
+          name: name,
+          village: document.getElementById('rVillage').value.trim(),
+          taluka: document.getElementById('rTaluka').value.trim(),
+          jilha: document.getElementById('rJilha').value.trim(),
+          mobile: document.getElementById('rMobile').value.trim(),
+          amount: amount,
+          payType: document.getElementById('rPayType').value,
+          source: 'mobile',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        var newDocRef = db.collection('receipts').doc();
+        tx.set(newDocRef, record);
+        tx.set(counterRef, { nextReceiptNo: n + 1 }, { merge: true });
+        return receiptNo;
+      });
+    }).then(function(receiptNo){
+      showMsg(document.getElementById('receiptMsg'), receiptNo + ' यशस्वीरित्या सेव्ह झाली ✅', true);
+      ['rName','rVillage','rTaluka','rJilha','rMobile','rAmount'].forEach(function(id){
+        document.getElementById(id).value = '';
+      });
+      initReceiptNumber();
+    }).catch(function(err){
+      showMsg(document.getElementById('receiptMsg'), 'चूक: ' + err.message, false);
+    }).finally(function(){
+      btn.disabled = false;
+      btn.textContent = 'पावती सेव्ह करा';
+    });
+  });
+
+  // ---- Key number ----
+  document.getElementById('saveKeyBtn').addEventListener('click', function(){
+    var btn = this;
+    var no = document.getElementById('kNo').value.trim();
+    var owner = document.getElementById('kOwner').value.trim();
+    if(!no || !owner){
+      showMsg(document.getElementById('keyMsg'), 'चावी क्रमांक आणि नाव भरणे आवश्यक आहे', false);
+      return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> सेव्ह होत आहे...';
+    db.collection('keys').add({
+      keyNo: no,
+      owner: owner,
+      village: document.getElementById('kVillage').value.trim(),
+      note: document.getElementById('kNote').value.trim(),
+      source: 'mobile',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(function(){
+      showMsg(document.getElementById('keyMsg'), 'चावी नंबर सेव्ह झाला ✅', true);
+      ['kNo','kOwner','kVillage','kNote'].forEach(function(id){
+        document.getElementById(id).value = '';
+      });
+    }).catch(function(err){
+      showMsg(document.getElementById('keyMsg'), 'चूक: ' + err.message, false);
+    }).finally(function(){
+      btn.disabled = false;
+      btn.textContent = 'चावी नंबर सेव्ह करा';
+    });
+  });
+
+  // ---- Live list ----
+  function startLiveList(){
+    var listEl = document.getElementById('liveList');
+    db.collection('receipts').orderBy('createdAt', 'desc').limit(15)
+      .onSnapshot(function(snap){
+        var receiptsHtml = snap.docs.map(function(d){
+          var r = d.data();
+          return '<div class="entry"><div class="top"><span>' + (r.no || '') +
+            '</span><span>₹' + (r.amount || '') + '</span></div>' +
+            '<div class="sub">' + (r.name || '') + ' · ' + (r.village || '') +
+            ' · ' + (r.source === 'mobile' ? '📱 मोबाईल' : '💻 software') + '</div></div>';
+        }).join('');
+        renderList(receiptsHtml);
+      }, function(err){
+        listEl.textContent = 'Live यादी लोड करता आली नाही: ' + err.message;
+      });
+
+    var keysHtml = '';
+    db.collection('keys').orderBy('createdAt', 'desc').limit(10)
+      .onSnapshot(function(snap){
+        keysHtml = snap.docs.map(function(d){
+          var k = d.data();
+          return '<div class="entry"><div class="top"><span>चावी: ' + (k.keyNo || '') +
+            '</span></div><div class="sub">' + (k.owner || '') + ' · ' + (k.village || '') +
+            ' · ' + (k.source === 'mobile' ? '📱 मोबाईल' : '💻 software') + '</div></div>';
+        }).join('');
+      });
+
+    function renderList(receiptsHtml){
+      listEl.innerHTML = '<div style="font-weight:600;margin-bottom:6px;color:var(--muted);font-size:13px;">पावती</div>' +
+        (receiptsHtml || '<div class="sub">अजून एन्ट्री नाही</div>') +
+        '<div style="font-weight:600;margin:14px 0 6px;color:var(--muted);font-size:13px;">चावी नंबर</div>' +
+        (keysHtml || '<div class="sub">अजून एन्ट्री नाही</div>');
+    }
+  }
+})();
+</script>
+</body>
+</html>
