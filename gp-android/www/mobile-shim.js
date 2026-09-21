@@ -66,18 +66,34 @@
     var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
     return m ? m[3] + '/' + m[2] + '/' + m[1] : s;
   }
-  function shareReceipt(win, text){
-    var d = win.document, el = d.getElementById('receipt');
-    if(!el) return Promise.reject(new Error('पावती सापडली नाही'));
+  /* पावतीचा फोटो — computer सारख्याच 720px रुंद मांडणीत.
+     फोनच्या अरुंद स्क्रीनवर घेतला तर पावती उंच/अरुंद होते; म्हणून अदृश्य 820px रुंद चौकटीत प्रत्यक्ष layout करून फोटो घेतो. */
+  function renderReceiptCanvas(win){
+    var d = win.document;
+    if(!d.getElementById('receipt')) return Promise.reject(new Error('पावती सापडली नाही'));
     if(typeof window.html2canvas !== 'function') return Promise.reject(new Error('html2canvas लोड झाले नाही'));
-    var no = (d.getElementById('receiptNo').textContent || 'pavati').trim().replace(/[^A-Za-z0-9_-]/g, '_');
-    win.scrollTo(0, 0);
-    return Promise.resolve(d.fonts && d.fonts.ready)
-      .then(function(){ return window.html2canvas(el, { scale: 3, backgroundColor: '#ffffff', useCORS: true, logging: false }); })
-      .then(function(canvas){
-        var b64 = canvas.toDataURL('image/png').split(',')[1];
-        return saveAndShare(no + '.png', b64, 'पावती ' + no, text || '');
-      });
+    var html = '<!DOCTYPE html>' + d.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/gi, '');
+    return new Promise(function(resolve, reject){
+      var f = document.createElement('iframe');
+      f.setAttribute('aria-hidden', 'true');
+      f.style.cssText = 'position:fixed;left:-10000px;top:0;width:820px;height:1600px;border:0;pointer-events:none;';
+      function done(){ if(f.parentNode) f.parentNode.removeChild(f); }
+      f.onload = function(){
+        var fd = f.contentDocument;
+        Promise.resolve(fd.fonts && fd.fonts.ready)
+          .then(function(){ return window.html2canvas(fd.getElementById('receipt'), { scale: 2.5, backgroundColor: '#ffffff', useCORS: true, logging: false }); })
+          .then(function(c){ done(); resolve(c); }, function(e){ done(); reject(e); });
+      };
+      f.srcdoc = html;
+      document.body.appendChild(f);
+    });
+  }
+  function shareReceipt(win, text){
+    var no = (win.document.getElementById('receiptNo').textContent || 'pavati').trim().replace(/[^A-Za-z0-9_-]/g, '_');
+    return renderReceiptCanvas(win).then(function(canvas){
+      var b64 = canvas.toDataURL('image/png').split(',')[1];
+      return saveAndShare(no + '.png', b64, 'पावती ' + no, text || '');
+    });
   }
   function closeReceipt(){
     if(overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
@@ -167,6 +183,8 @@
 
   /* ---------- 6) सुरुवात ---------- */
   function start(){
+    var sub = document.querySelector('header .sub');
+    if(sub) sub.textContent += ' · आवृत्ती v3 (पावती 720)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
     var app = $('app'); if(app) app.style.display = 'block';   // computer प्रमाणे — पासवर्ड नाही; खरे संरक्षण = Cloud लॉगिन
     if(typeof initAll === 'function') initAll();
     var s = $('secretInput');
