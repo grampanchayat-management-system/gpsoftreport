@@ -128,21 +128,36 @@
     if($('cloudCard')) return;
     var css = document.createElement('style');
     css.textContent =
-      '.cloud-pill{display:inline-block;margin-top:8px;padding:4px 12px;border-radius:14px;font-size:12px;font-weight:700;cursor:pointer;background:#333;color:#ccc;border:1px solid #555}' +
+      '.cloud-pill{display:inline-block;padding:4px 12px;border-radius:14px;font-size:12px;font-weight:700;cursor:pointer;background:#333;color:#ccc;border:1px solid #555}' +
       '.cloud-pill.online{background:#1b5e20;color:#c8e6c9;border-color:#2e7d32}' +
       '.cloud-pill.offline,.cloud-pill.connecting{background:#4e3b00;color:#ffe082;border-color:#8d6e00}' +
       '.cloud-pill.error{background:#5c1a1a;color:#ffcdd2;border-color:#b71c1c}' +
-      '.cloud-pill.off{background:#0f3460;color:#ffd700;border-color:#1565c0}';
+      '.cloud-pill.off{background:#0f3460;color:#ffd700;border-color:#1565c0}' +
+      '.cloud-pill.syncbtn{background:#0f3460;color:#4fc3f7;border-color:#1565c0}' +
+      '.cloud-pill.syncbtn.busy{opacity:.6;pointer-events:none}';
     document.head.appendChild(css);
 
     var hdr = document.querySelector('header');
     if(hdr){
+      var row = document.createElement('div');
+      row.id = 'hdrRow';
+      row.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px';
       var pill = document.createElement('div');
       pill.id = 'cloudPill';
       pill.className = 'cloud-pill off';
       pill.textContent = STATUS_TXT.off;
       pill.addEventListener('click', function(){ if(typeof switchTab === 'function') switchTab('settings'); });
-      hdr.appendChild(pill);
+      var sync = document.createElement('div');
+      sync.id = 'hdrSyncBtn';
+      sync.className = 'cloud-pill syncbtn';
+      sync.textContent = '🔄 Sync करा';
+      sync.title = 'फॉर्म आणि तक्रारी दोन्ही Google Sheet एकत्र Sync करा';
+      sync.addEventListener('click', function(){ CS.syncSheetsNow(); });
+      var note = document.createElement('div');
+      note.id = 'hdrSyncNote';
+      note.style.cssText = 'flex-basis:100%;font-size:12px;color:#aaa';
+      row.appendChild(pill); row.appendChild(sync); row.appendChild(note);
+      hdr.appendChild(row);
     }
 
     var tab = $('tab-settings');
@@ -181,6 +196,33 @@
     var u = $('cloudUser');
     if(u) u.textContent = on && CS.user ? (CS.user.email || CS.user.uid) : '';
   }
+
+  /* ---------- वरचे "Sync करा" बटण: फॉर्म + तक्रारी दोन्ही Sheet एकत्र ---------- */
+  CS.syncSheetsNow = function(){
+    var btn = $('hdrSyncBtn'), note = $('hdrSyncNote');
+    if(!btn || btn.classList.contains('busy') || typeof syncBoth !== 'function') return;
+    btn.classList.add('busy');
+    btn.textContent = '⏳ Sync होत आहे…';
+    if(note){ note.style.color = '#aaa'; note.textContent = ''; }
+    return syncBoth().then(function(res){
+      var parts = [], bad = false;
+      res.forEach(function(r){
+        if(r.ok) parts.push(r.label + ': ' + r.count + ' नोंदी');
+        else { bad = true; parts.push(r.label + ': ⚠️ ' + r.error); }
+      });
+      var t = new Date();
+      var hm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+      if(note){
+        note.style.color = bad ? '#ff8a80' : '#8bc34a';
+        note.textContent = (bad ? '⚠️ ' : '✅ Sync झाले — ') + parts.join(' · ') + '  (' + hm + ')';
+      }
+    }).catch(function(e){
+      if(note){ note.style.color = '#ff8a80'; note.textContent = '⚠️ Sync अयशस्वी: ' + ((e && e.message) || e); }
+    }).then(function(){
+      btn.classList.remove('busy');
+      btn.textContent = '🔄 Sync करा';
+    });
+  };
 
   /* ---------- login / logout ---------- */
   CS.login = function(){

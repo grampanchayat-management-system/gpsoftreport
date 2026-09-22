@@ -637,22 +637,25 @@ function fetchCsvChecked(csvUrl){
     return text;
   });
 }
-function syncOne(type, userTriggered){
+function syncOne(type, userTriggered, opts){
+  /* परत देते: Promise<{type,label,ok,count,error,skipped}>.  opts.quiet=true => alert नाही (वरच्या Sync बटणासाठी) */
+  var quiet = !!(opts && opts.quiet);
   var label = type==='form' ? 'फॉर्म' : 'तक्रारी';
+  var say = userTriggered && !quiet;
   var url = type==='form' ? config.formUrl : config.complaintUrl;
   if(!url){
-    if(userTriggered) alert('आधी सेटिंग्समध्ये जाऊन '+label+' Sheet ची link टाका.');
-    return;
+    if(say) alert('आधी सेटिंग्समध्ये जाऊन '+label+' Sheet ची link टाका.');
+    return Promise.resolve({type:type,label:label,ok:false,skipped:true,error:'link नाही (Settings मध्ये टाका)'});
   }
   var kind = sheetKind(url);
   if(kind==='form-link'){
-    if(userTriggered) alert('⚠️ '+label+' Sheet: तुम्ही Google Form ची link टाकली आहे.\n\nSheet ची link हवी — Form च्या Responses टॅबमध्ये "Link to Sheets" करून, त्या Sheet ची link (docs.google.com/spreadsheets/...) टाका.');
-    return;
+    if(say) alert('⚠️ '+label+' Sheet: तुम्ही Google Form ची link टाकली आहे.\n\nSheet ची link हवी — Form च्या Responses टॅबमध्ये "Link to Sheets" करून, त्या Sheet ची link (docs.google.com/spreadsheets/...) टाका.');
+    return Promise.resolve({type:type,label:label,ok:false,skipped:true,error:'Form ची link आहे, Sheet ची हवी'});
   }
   var csvUrl = toCsvExportUrl(url);
   var altUrl = kind==='sheet' ? toGvizCsvUrl(url) : '';
   var usedUrl = csvUrl;
-  fetchCsvChecked(csvUrl)
+  return fetchCsvChecked(csvUrl)
     .catch(function(err1){
       if(!altUrl) throw err1;
       usedUrl = altUrl;
@@ -664,15 +667,21 @@ function syncOne(type, userTriggered){
       var rows = parseCSV(text);
       if(!rows.length) throw new Error('रिकामा प्रतिसाद');
       applySheetData(type, rows);
-      if(userTriggered) alert(label+' Sheet यशस्वीरित्या Sync झाली — '+ (rows.length-1) +' नोंदी.');
+      if(say) alert(label+' Sheet यशस्वीरित्या Sync झाली — '+ (rows.length-1) +' नोंदी.');
+      return {type:type,label:label,ok:true,count:rows.length-1};
     })
     .catch(function(err){
-      if(userTriggered){
+      if(say){
         alert('⚠️ '+label+' Sheet — Sync अयशस्वी.\n\nचूक: '+err.message+
           '\n\nवापरलेला पत्ता:\n'+usedUrl+
           '\n\nतपासा:\n1) Sheet "Anyone with the link – Viewer" शेअर आहे का\n2) Settings मध्ये Sheet ची (Form ची नव्हे) link आहे का\n3) इंटरनेट चालू आहे का\n\nउपाय: सेटिंग्स टॅबमधील "Manual Import" वापरा (Sheet CSV म्हणून download करून paste करा).');
       }
+      return {type:type,label:label,ok:false,error:err.message};
     });
+}
+/* दोन्ही Sheet एकत्र sync — वरच्या "Sync करा" बटणासाठी (alert नाही, निकाल परत देतो) */
+function syncBoth(){
+  return Promise.all([syncOne('form', true, {quiet:true}), syncOne('complaint', true, {quiet:true})]);
 }
 function applySheetData(type, rows){
   var headers = rows[0];
@@ -953,6 +962,10 @@ function generateKeys(){
     '<div class="key-out-box"><div class="lbl">'+rec.gpName+' — Machine Code '+rec.machineCode+(rec.mobile?(' — 📱 '+rec.mobile):'')+' — Lifetime</div>'+
     '<div class="kv">'+rec.key+'</div>'+
     '<div style="text-align:center"><button class="btn btn-copy" onclick="copyKey(\''+rec.key+'\',this)">📋 Copy</button></div></div>';
+  /* GP_KEYFORM_RESET: पुढच्या customer साठी फॉर्म रिकामा (तयार झालेली Key वरच्या box मध्ये दिसत राहते) */
+  ['gpName','gpCode','machineCode','customerName','customerMobile'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.value = '';
+  });
 }
 function copyKey(key, btn){
   navigator.clipboard.writeText(key).then(function(){
