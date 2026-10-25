@@ -556,6 +556,8 @@ function autoMap(headers, type, rows){
   if (type==='form'){
     m.refName   = guessCol(headers, REF_NAME_KEYS, NAME_AVOID);
     m.refMobile = guessCol(headers, REF_MOBILE_KEYS, MOBILE_AVOID);
+    m.taluka    = guessCol(headers, ['taluka','तालुका','tehsil','tahsil','तहसील'], ['timestamp','date']);
+    m.jilha     = guessCol(headers, ['district','jilha','जिल्हा','जिल्ह','zilla','zila'], ['timestamp','date']);
   }
 
   if (type==='complaint'){
@@ -724,9 +726,9 @@ function importManual(type){
 /* ============================================================
    COLUMN MAPPING UI
    ============================================================ */
-var FIELD_LABELS = {name:'नाव',mobile:'मोबाईल',village:'गाव',date:'दिनांक',text:'तक्रार मजकूर',status:'स्थिती',refName:'रेफरलचे नाव',refMobile:'रेफरलचा मोबाईल'};
+var FIELD_LABELS = {name:'नाव',mobile:'मोबाईल',village:'गाव',date:'दिनांक',text:'तक्रार मजकूर',status:'स्थिती',refName:'रेफरलचे नाव',refMobile:'रेफरलचा मोबाईल',taluka:'तालुका',jilha:'जिल्हा'};
 function renderMapBoxes(){
-  renderOneMapBox('formMapBox2', formCache, config.formMap, 'form', ['name','mobile','village','date','refName','refMobile']);
+  renderOneMapBox('formMapBox2', formCache, config.formMap, 'form', ['name','mobile','village','taluka','jilha','date','refName','refMobile']);
   renderOneMapBox('complaintMapBox2', compCache, config.complaintMap, 'complaint', ['name','mobile','date','text','status']);
 }
 function renderOneMapBox(elId, cache, map, type, fields){
@@ -765,8 +767,93 @@ function setMap(type, field, value, sourceElId){
 /* ============================================================
    GENERIC SHEET TABLE RENDER (form + complaint)
    ============================================================ */
+
+/* ============================================================
+   WHATSAPP — फॉर्म भरलेल्या प्रत्येकाला "धन्यवाद + Payment" मेसेज व फोटो
+   (मेसेज बदलायचा असल्यास फक्त खालील WA_FORM_LINES बदला)
+   ============================================================ */
+var WA_FORM_LINES = {
+  top: [
+    'नमस्कार, 🙏',
+    ''
+  ],
+  /* इथे {PLACE} च्या जागी  📍 गाव | तालुका | जिल्हा  आपोआप येतो */
+  body: [
+    'आपण आमचे GP Software डाउनलोड केल्यानंतर भरलेला फॉर्म आम्हाला यशस्वीरित्या प्राप्त झाला आहे. धन्यवाद! 😊',
+    '',
+    'सॉफ्टवेअर पूर्णपणे सुरू करण्यासाठी (Activation) कृपया 4999 रक्कम 9766893604 या फोनपे / गुगलपे नंबर वर पाठविण्यात यावी. पेमेंट प्राप्त होताच आपल्याला सॉफ्टवेअरची Key पाठवण्यात येईल.',
+    '',
+    'पेमेंटबाबत किंवा सॉफ्टवेअरबाबत काही शंका असल्यास कृपया नि:संकोच संपर्क करा.',
+    '',
+    'धन्यवाद! 🙏',
+    '',
+    '⬇️ सॉफ्टवेअर Download लिंक:',
+    'https://grampanchayat-management-system.github.io/software-download/',
+    '',
+    '🎬 वापर कसा करायचा (Video मार्गदर्शन):',
+    'https://youtu.be/nGbr8NNVE6Q',
+    '',
+    '📄 सविस्तर PDF मार्गदर्शक :',
+    'https://cdn.jsdelivr.net/gh/grampanchayat-management-system/software-download@main/guide.pdf'
+  ]
+};
+
+function gpToast(text){
+  var old = document.getElementById('gpToast'); if(old) old.remove();
+  var t = document.createElement('div');
+  t.id = 'gpToast';
+  t.textContent = text;
+  t.style.cssText = 'position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:90%;background:#0b3d1e;color:#fff;border:1px solid #25D366;border-radius:12px;padding:12px 16px;font-size:14px;font-weight:700;z-index:100000;box-shadow:0 4px 16px rgba(0,0,0,.5);text-align:center';
+  document.body.appendChild(t);
+  setTimeout(function(){ if(t.parentNode) t.remove(); }, 9000);
+}
+
+function formRowInfo(r){
+  var fm = config.formMap || {};
+  function cell(f){
+    var ix = fm[f];
+    return (typeof ix==='number' && ix>=0 && r[ix]!==undefined && r[ix]!==null) ? String(r[ix]).trim() : '';
+  }
+  var village = cell('village');
+  var taluka  = (fm.taluka === fm.village) ? '' : cell('taluka');
+  var jilha   = (fm.jilha  === fm.village || fm.jilha === fm.taluka) ? '' : cell('jilha');
+  return { name: cell('name'), mobile: normMobile(cell('mobile')), village: village, taluka: taluka, jilha: jilha };
+}
+
+function buildFormWaMessage(info){
+  var place = [];
+  if(info.village) place.push('गाव: ' + info.village);
+  if(info.taluka)  place.push('तालुका: ' + info.taluka);
+  if(info.jilha)   place.push('जिल्हा: ' + info.jilha);
+  var lines = WA_FORM_LINES.top.slice();
+  if(place.length){ lines.push('📍 ' + place.join(' | ')); lines.push(''); }
+  return lines.concat(WA_FORM_LINES.body).join('\n');
+}
+
+function sendFormWhatsApp(i){
+  var r = formCache.rows && formCache.rows[i];
+  if(!r) return;
+  var info = formRowInfo(r);
+  if(info.mobile.length !== 10){
+    alert('या नोंदीचा मोबाईल नंबर बरोबर सापडला नाही' + (info.mobile ? ' ('+info.mobile+')' : '') + '.\n\nसेटिंग्समध्ये "फॉर्म — कॉलम निवड" मधून मोबाईल कॉलम तपासा.');
+    return;
+  }
+  var msg = buildFormWaMessage(info);
+  if(window.gpBridge && window.gpBridge.sendFlyerWhatsApp){
+    window.gpBridge.sendFlyerWhatsApp({ mobile: info.mobile, name: info.name, message: msg })
+      .then(function(res){
+        if(res && res.ok === false){ alert('WhatsApp उघडता आले नाही: ' + (res.error || '')); return; }
+        if(res && res.hint) gpToast(res.hint);
+      });
+  } else {
+    window.open('https://wa.me/91' + info.mobile + '?text=' + encodeURIComponent(msg), '_blank');
+  }
+}
+
 function renderFormTable(){
-  renderSheetTable(formCache, 'formTHead', 'formTable', document.getElementById('formSearch').value);
+  renderSheetTable(formCache, 'formTHead', 'formTable', document.getElementById('formSearch').value, 'WhatsApp', function(r, idx){
+    return '<button onclick="sendFormWhatsApp('+idx+')" style="background:#25D366;color:#04210f;border:none;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap">💬 WhatsApp</button>';
+  });
   document.getElementById('formSyncTxt').textContent = formCache.fetchedAt ? ('शेवटचं Sync: '+ new Date(formCache.fetchedAt).toLocaleString('mr-IN')) : '';
   document.getElementById('formSheetLink').href = config.formUrl || '#';
 }
@@ -775,17 +862,21 @@ function renderComplaintTable(){
   document.getElementById('complaintSyncTxt').textContent = compCache.fetchedAt ? ('शेवटचं Sync: '+ new Date(compCache.fetchedAt).toLocaleString('mr-IN')) : '';
   document.getElementById('complaintSheetLink').href = config.complaintUrl || '#';
 }
-function renderSheetTable(cache, theadId, tbodyId, search){
+function renderSheetTable(cache, theadId, tbodyId, search, actionHead, actionFn){
   var thead = document.getElementById(theadId), tbody = document.getElementById(tbodyId);
   if(!cache.headers || !cache.headers.length){
     thead.innerHTML=''; tbody.innerHTML='<tr><td class="no-data">डेटा नाही.</td></tr>'; return;
   }
-  thead.innerHTML = '<tr>'+cache.headers.map(function(h){return '<th>'+(h||'')+'</th>';}).join('')+'</tr>';
+  var extra = actionFn ? 1 : 0;
+  thead.innerHTML = '<tr>'+(extra ? '<th>'+actionHead+'</th>' : '')+cache.headers.map(function(h){return '<th>'+(h||'')+'</th>';}).join('')+'</tr>';
   var s=(search||'').toLowerCase();
-  var rows = cache.rows.filter(function(r){ return !s || r.join(' ').toLowerCase().indexOf(s)!==-1; });
-  if(!rows.length){ tbody.innerHTML='<tr><td colspan="'+cache.headers.length+'" class="no-data">काही सापडलं नाही.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(function(r){
-    return '<tr>'+cache.headers.map(function(h,i){ return '<td>'+(r[i]||'')+'</td>'; }).join('')+'</tr>';
+  var list = [];
+  cache.rows.forEach(function(r, idx){
+    if(!s || r.join(' ').toLowerCase().indexOf(s)!==-1) list.push({r:r, idx:idx});
+  });
+  if(!list.length){ tbody.innerHTML='<tr><td colspan="'+(cache.headers.length+extra)+'" class="no-data">काही सापडलं नाही.</td></tr>'; return; }
+  tbody.innerHTML = list.map(function(o){
+    return '<tr>'+(extra ? '<td>'+actionFn(o.r, o.idx)+'</td>' : '')+cache.headers.map(function(h,i){ return '<td>'+(o.r[i]||'')+'</td>'; }).join('')+'</tr>';
   }).join('');
 }
 

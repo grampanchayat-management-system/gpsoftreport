@@ -155,6 +155,23 @@
   window.gpBridge = {
     fetchSheetCsv: fetchSheetCsv,
     printReceipt: function(rec){ openReceipt(rec); },
+    /* फॉर्म प्रतिसादातील "💬 WhatsApp" — जाहिरातीचा फोटो + मेसेज share sheet मध्ये */
+    sendFlyerWhatsApp: function(payload){
+      payload = payload || {};
+      return fetch('gp-flyer.jpg')
+        .then(function(r){ if(!r.ok) throw new Error('फोटो सापडला नाही'); return r.blob(); })
+        .then(function(blob){
+          return new Promise(function(resolve, reject){
+            var fr = new FileReader();
+            fr.onload = function(){ resolve(String(fr.result).split(',')[1]); };
+            fr.onerror = function(){ reject(new Error('फोटो वाचता आला नाही')); };
+            fr.readAsDataURL(blob);
+          });
+        })
+        .then(function(b64){ return saveAndShare('gp-software.jpg', b64, 'ग्रामपंचायत सॉफ्टवेअर', payload.message || ''); })
+        .then(function(){ return { ok: true, hint: '📲 WhatsApp निवडा आणि ' + (payload.name ? payload.name + ' — ' : '') + payload.mobile + ' हा चॅट निवडा.' }; })
+        .catch(function(e){ return isCancel(e) ? { ok: true } : { ok: false, error: msgOf(e) }; });
+    },
     sendWhatsApp: function(payload){
       var win = frame && frame.contentWindow;
       if(!win) return Promise.resolve({ ok: false, error: 'पावती उघडलेली नाही' });
@@ -184,7 +201,7 @@
   /* ---------- 6) सुरुवात ---------- */
   function start(){
     var sub = document.querySelector('header .sub');
-    if(sub) sub.textContent += ' · आवृत्ती v3 (पावती 720)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
+    if(sub) sub.textContent += ' · आवृत्ती v5 (WhatsApp फॉर्म)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
     var app = $('app'); if(app) app.style.display = 'block';   // computer प्रमाणे — पासवर्ड नाही; खरे संरक्षण = Cloud लॉगिन
     if(typeof initAll === 'function') initAll();
     var s = $('secretInput');
