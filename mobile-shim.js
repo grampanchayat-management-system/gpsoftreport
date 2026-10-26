@@ -53,6 +53,24 @@
     return P.Filesystem.writeFile({ path: 'export/' + filename, data: b64, directory: 'CACHE', recursive: true })
       .then(function(r){ return P.Share.share({ title: title || filename, text: text || '', files: [r.uri], dialogTitle: 'सेव्ह / शेअर करा' }); });
   }
+  /* फोटो + मेसेज थेट त्या नंबरच्या WhatsApp चॅटमध्ये (native WaSend plugin). नंबर नसेल / plugin नसेल / अयशस्वी → share sheet */
+  function waSendImage(o){
+    if(!P.Filesystem || !P.Share) return Promise.reject(new Error('हे फीचर फोनवर app मध्येच चालते.'));
+    return P.Filesystem.writeFile({ path: 'export/' + o.filename, data: o.b64, directory: 'CACHE', recursive: true }).then(function(r){
+      var phone = String(o.phone || '').replace(/\D/g, '');
+      function shareSheet(reason){
+        return P.Share.share({ title: o.title || o.filename, text: o.text || '', files: [r.uri], dialogTitle: 'WhatsApp निवडा' })
+          .then(function(){ return { ok: true, hint: phone.length >= 10 ? ('📲 WhatsApp निवडा आणि ' + (o.name ? o.name + ' — ' : '') + phone + ' हा चॅट निवडा.' + (reason ? '\n[थेट चॅट न उघडण्याचे कारण: ' + reason + ']' : '')) : '' }; });
+      }
+      if(phone.length < 10) return shareSheet('नंबर बरोबर नाही: ' + (o.phone || 'रिकामा'));
+      var WA = null, regErr = '';
+      try{ WA = (C.registerPlugin ? C.registerPlugin('WaSend') : P.WaSend) || null; }catch(e){ WA = null; regErr = msgOf(e); }
+      if(!WA || !WA.send) return shareSheet('WaSend plugin app मध्ये नाही ' + regErr);
+      return WA.send({ phone: phone, text: o.text || '', fileUri: r.uri, mime: o.mime || 'image/jpeg' })
+        .then(function(){ return { ok: true, hint: '✅ चॅट उघडला — फक्त WhatsApp मध्ये Send दाबा.' }; })
+        .catch(function(e){ return isCancel(e) ? { ok: true } : shareSheet(msgOf(e)); });
+    });
+  }
   window.downloadFile = function(content, filename){
     saveAndShare(filename, b64utf8(content), filename).catch(function(e){
       if(!isCancel(e)) alert('फाईल तयार करता आली नाही: ' + msgOf(e));
@@ -88,11 +106,11 @@
       document.body.appendChild(f);
     });
   }
-  function shareReceipt(win, text){
+  function shareReceipt(win, text, phone, name){
     var no = (win.document.getElementById('receiptNo').textContent || 'pavati').trim().replace(/[^A-Za-z0-9_-]/g, '_');
     return renderReceiptCanvas(win).then(function(canvas){
       var b64 = canvas.toDataURL('image/png').split(',')[1];
-      return saveAndShare(no + '.png', b64, 'पावती ' + no, text || '');
+      return waSendImage({ b64: b64, filename: no + '.png', mime: 'image/png', phone: phone || '', text: text || '', title: 'पावती ' + no, name: name || '' });
     });
   }
   function closeReceipt(){
@@ -142,7 +160,9 @@
     $('rcShare').onclick = function(){
       var win = frame && frame.contentWindow; if(!win) return;
       var msg = 'नमस्कार ' + (rec.name || '') + ',\nआपली पावती क्र. ' + (rec.no || '') + ' रक्कम ₹' + (rec.amount || '') + ' साठी सोबत जोडत आहे. धन्यवाद — ग्रामपंचायत सॉफ्टवेअर.';
-      shareReceipt(win, msg).catch(function(e){ if(!isCancel(e)) alert('शेअर करता आले नाही: ' + msgOf(e)); });
+      var mob = ((win.document.getElementById('fldMobile') || {}).textContent || rec.mobile || '').trim();
+      shareReceipt(win, msg, mob, rec.name).then(function(res){ if(res && res.hint && window.gpToast) window.gpToast(res.hint); })
+        .catch(function(e){ if(!isCancel(e)) alert('शेअर करता आले नाही: ' + msgOf(e)); });
     };
   }
   window.openBlankReceipt = function(){
@@ -155,7 +175,8 @@
   window.gpBridge = {
     fetchSheetCsv: fetchSheetCsv,
     printReceipt: function(rec){ openReceipt(rec); },
-    /* फॉर्म प्रतिसादातील "💬 WhatsApp" — जाहिरातीचा फोटो + मेसेज share sheet मध्ये */
+    /* फॉर्म प्रतिसादातील "💬 WhatsApp" — त्या नंबरचा WhatsApp चॅट थेट उघडतो (फोटो + मेसेज भरून).
+       native WaSend plugin नसेल/अयशस्वी झाला तर share sheet (जुनी पद्धत) वापरतो. */
     sendFlyerWhatsApp: function(payload){
       payload = payload || {};
       return fetch('gp-flyer.jpg')
@@ -168,15 +189,17 @@
             fr.readAsDataURL(blob);
           });
         })
-        .then(function(b64){ return saveAndShare('gp-software.jpg', b64, 'ग्रामपंचायत सॉफ्टवेअर', payload.message || ''); })
-        .then(function(){ return { ok: true, hint: '📲 WhatsApp निवडा आणि ' + (payload.name ? payload.name + ' — ' : '') + payload.mobile + ' हा चॅट निवडा.' }; })
+        .then(function(b64){
+          return waSendImage({ b64: b64, filename: 'gp-software.jpg', mime: 'image/jpeg', phone: payload.mobile, text: payload.message || '', title: 'ग्रामपंचायत सॉफ्टवेअर', name: payload.name });
+        })
         .catch(function(e){ return isCancel(e) ? { ok: true } : { ok: false, error: msgOf(e) }; });
     },
     sendWhatsApp: function(payload){
       var win = frame && frame.contentWindow;
       if(!win) return Promise.resolve({ ok: false, error: 'पावती उघडलेली नाही' });
-      return shareReceipt(win, payload && payload.message || '')
-        .then(function(){ return { ok: true }; })
+      payload = payload || {};
+      return shareReceipt(win, payload.message || '', payload.mobile || '', '')
+        .then(function(res){ return res || { ok: true }; })
         .catch(function(e){ return isCancel(e) ? { ok: true } : { ok: false, error: msgOf(e) }; });
     }
   };
@@ -201,7 +224,7 @@
   /* ---------- 6) सुरुवात ---------- */
   function start(){
     var sub = document.querySelector('header .sub');
-    if(sub) sub.textContent += ' · आवृत्ती v5 (WhatsApp फॉर्म)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
+    if(sub) sub.textContent += ' · आवृत्ती v8 (WhatsApp निदान)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
     var app = $('app'); if(app) app.style.display = 'block';   // computer प्रमाणे — पासवर्ड नाही; खरे संरक्षण = Cloud लॉगिन
     if(typeof initAll === 'function') initAll();
     var s = $('secretInput');
