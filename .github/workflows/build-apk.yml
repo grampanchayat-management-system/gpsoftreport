@@ -1,42 +1,45 @@
-name: Build Android APK
+#!/usr/bin/env python3
+"""
+`npx cap add android` नंतर चालवायचे:  python3 native/add_wa_plugin.py
+  → WaSendPlugin जोडतो आणि MainActivity मध्ये register करतो.
+`python3 native/add_wa_plugin.py --remove`
+  → (build अयशस्वी झाल्यास) plugin काढून MainActivity पूर्ववत करतो.
+"""
+import sys, re, shutil
+from pathlib import Path
 
-on:
-  push:
-    branches: [main, master]
-  workflow_dispatch:
+root = Path(__file__).resolve().parent.parent
+java_root = root / 'android' / 'app' / 'src' / 'main' / 'java'
+mains = list(java_root.rglob('MainActivity.java'))
+if not mains:
+    print('MainActivity.java सापडली नाही'); sys.exit(1)
+main = mains[0]
+bak = main.with_suffix('.java.bak')
+plugin_dst = main.parent / 'WaSendPlugin.java'
 
-defaults:
-  run:
-    working-directory: gp-android
+if '--remove' in sys.argv:
+    if plugin_dst.exists(): plugin_dst.unlink()
+    if bak.exists():
+        shutil.copyfile(bak, main)
+    print('plugin काढला'); sys.exit(0)
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+src = main.read_text(encoding='utf-8')
+pkg = re.search(r'^package\s+([\w.]+);', src, re.M).group(1)
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+shutil.copyfile(main, bak)
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
+plugin = (root / 'native' / 'WaSendPlugin.java').read_text(encoding='utf-8')
+plugin = re.sub(r'^package\s+[\w.]+;', 'package ' + pkg + ';', plugin, count=1, flags=re.M)
+plugin_dst.write_text(plugin, encoding='utf-8')
 
-
-      - run: npm ci
-      - run: npx cap add android
-      - run: npx capacitor-assets generate --android
-      - run: npx cap sync android
-
-      - name: Build APK
-        working-directory: gp-android/android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: GP-Software-APK
-          path: gp-android/android/app/build/outputs/apk/debug/app-debug.apk
+old = 'public class MainActivity extends BridgeActivity {}'
+assert old in src, 'MainActivity चा आकार अपेक्षेप्रमाणे नाही'
+new = '''public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(android.os.Bundle savedInstanceState) {
+        registerPlugin(WaSendPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+}'''
+main.write_text(src.replace(old, new), encoding='utf-8')
+print('WaSend plugin जोडला:', plugin_dst)
