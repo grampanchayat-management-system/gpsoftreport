@@ -178,11 +178,11 @@ input,select,textarea{font-size:16px !important}
     <div class="tbl-wrap">
       <table>
         <thead><tr>
-          <th>#</th><th>मोबाईल</th><th>नाव</th><th>गाव</th>
+          <th>#</th><th>WhatsApp</th><th>मोबाईल</th><th>नाव</th><th>गाव</th>
           <th>फॉर्म</th><th>Key</th><th>Payment</th><th>पावती क्र.</th><th>तक्रार</th>
           <th>रेफरलचे नाव</th><th>रेफरलचा मोबाईल</th>
         </tr></thead>
-        <tbody id="masterTable"><tr><td colspan="11" class="no-data">डेटा नाही. सेटिंग्समध्ये Sheets जोडून Sync करा.</td></tr></tbody>
+        <tbody id="masterTable"><tr><td colspan="12" class="no-data">डेटा नाही. सेटिंग्समध्ये Sheets जोडून Sync करा.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -230,8 +230,8 @@ input,select,textarea{font-size:16px !important}
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>#</th><th>Key</th><th>GP नाव</th><th>Customer</th><th>मोबाईल</th><th>Machine Code</th><th>दिनांक</th><th></th></tr></thead>
-        <tbody id="keysTable"><tr><td colspan="8" class="no-data">Keys नाहीत.</td></tr></tbody>
+        <thead><tr><th>#</th><th>WhatsApp</th><th>Key</th><th>GP नाव</th><th>Customer</th><th>मोबाईल</th><th>Machine Code</th><th>दिनांक</th><th></th></tr></thead>
+        <tbody id="keysTable"><tr><td colspan="9" class="no-data">Keys नाहीत.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -843,16 +843,65 @@ function sendFormWhatsApp(i){
     window.gpBridge.sendFlyerWhatsApp({ mobile: info.mobile, name: info.name, message: msg })
       .then(function(res){
         if(res && res.ok === false){ alert('WhatsApp उघडता आले नाही: ' + (res.error || '')); return; }
+        waSentMark(info.mobile);
+        renderFormTable();
         if(res && res.hint) gpToast(res.hint);
       });
   } else {
     window.open('https://wa.me/91' + info.mobile + '?text=' + encodeURIComponent(msg), '_blank');
+    waSentMark(info.mobile);
+    renderFormTable();
+  }
+}
+
+/* ---- "शेवटचा मेसेज कधी" नोंद (या डिव्हाइसवर, नंबरनुसार) ---- */
+var WA_SENT_KEY = 'gp_wa_sent_v1';
+function waSentAll(){
+  try{ return JSON.parse(localStorage.getItem(WA_SENT_KEY) || '{}') || {}; }catch(e){ return {}; }
+}
+function waSentMark(mobile){
+  if(!mobile) return;
+  try{
+    var all = waSentAll();
+    all[mobile] = Date.now();
+    localStorage.setItem(WA_SENT_KEY, JSON.stringify(all));
+  }catch(e){}
+}
+function waSentText(mobile){
+  var ts = waSentAll()[mobile];
+  if(!ts) return '<span style="color:#8aa0b8">अजून पाठवला नाही</span>';
+  var d = new Date(ts), txt;
+  try{ txt = d.toLocaleString('mr-IN', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}); }
+  catch(e){ txt = d.toLocaleString(); }
+  return '<span style="color:#7be495">✉️ शेवटचा: ' + txt + '</span>';
+}
+
+/* 👁️ पहा — त्या नंबरचा WhatsApp चॅट उघडतो (आधी पाठवलेले मेसेज व आलेले रिप्लाय दिसतात) */
+function viewFormChat(i){
+  var r = formCache.rows && formCache.rows[i];
+  if(!r) return;
+  var info = formRowInfo(r);
+  if(info.mobile.length !== 10){
+    alert('या नोंदीचा मोबाईल नंबर बरोबर सापडला नाही' + (info.mobile ? ' ('+info.mobile+')' : '') + '.');
+    return;
+  }
+  if(window.gpBridge && window.gpBridge.openWhatsAppChat){
+    window.gpBridge.openWhatsAppChat({ mobile: info.mobile, name: info.name }).then(function(res){
+      if(res && res.ok === false){ alert('WhatsApp उघडता आले नाही: ' + (res.error || '')); return; }
+      if(res && res.hint) gpToast(res.hint);
+    });
+  } else {
+    window.open('https://wa.me/91' + info.mobile, '_blank');
   }
 }
 
 function renderFormTable(){
   renderSheetTable(formCache, 'formTHead', 'formTable', document.getElementById('formSearch').value, 'WhatsApp', function(r, idx){
-    return '<button onclick="sendFormWhatsApp('+idx+')" style="background:#25D366;color:#04210f;border:none;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap">💬 WhatsApp</button>';
+    var mob = formRowInfo(r).mobile;
+    return '<div style="white-space:nowrap">'
+      + '<button onclick="sendFormWhatsApp('+idx+')" style="background:#25D366;color:#04210f;border:none;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer">💬 WhatsApp</button> '
+      + '<button onclick="viewFormChat('+idx+')" style="background:#1d4f91;color:#fff;border:none;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer">👁️ पहा</button>'
+      + '</div><div style="font-size:12px;margin-top:4px">' + waSentText(mob) + '</div>';
   });
   document.getElementById('formSyncTxt').textContent = formCache.fetchedAt ? ('शेवटचं Sync: '+ new Date(formCache.fetchedAt).toLocaleString('mr-IN')) : '';
   document.getElementById('formSheetLink').href = config.formUrl || '#';
@@ -917,7 +966,7 @@ function buildMasterList(){
   var byMobile = {};
   function getRec(mobile, name){
     var key = mobile || ('name:'+normName(name));
-    if(!byMobile[key]) byMobile[key] = {mobile:mobile||'', name:name||'', village:'', formFilled:false, keyGiven:false, keyVal:'', paymentDone:false, amount:0, receiptNo:'', complaint:false, complaintText:'', refName:'', refMobile:''};
+    if(!byMobile[key]) byMobile[key] = {mobile:mobile||'', name:name||'', village:'', taluka:'', jilha:'', formFilled:false, keyGiven:false, keyVal:'', paymentDone:false, amount:0, receiptNo:'', complaint:false, complaintText:'', refName:'', refMobile:''};
     return byMobile[key];
   }
 
@@ -931,6 +980,8 @@ function buildMasterList(){
       rec.formFilled = true;
       if(!rec.name && nm) rec.name = nm;
       if(fm.village>=0 && r[fm.village]) rec.village = r[fm.village];
+      if(fm.taluka>=0 && fm.taluka!==fm.village && r[fm.taluka]) rec.taluka = r[fm.taluka];
+      if(fm.jilha>=0 && fm.jilha!==fm.village && fm.jilha!==fm.taluka && r[fm.jilha]) rec.jilha = r[fm.jilha];
       if(fm.refName>=0 && r[fm.refName] && !rec.refName) rec.refName = r[fm.refName];
       if(fm.refMobile>=0 && r[fm.refMobile] && !rec.refMobile) rec.refMobile = normMobile(r[fm.refMobile]) || r[fm.refMobile];
     });
@@ -974,6 +1025,111 @@ function buildMasterList(){
   return Object.keys(byMobile).map(function(k){ return byMobile[k]; });
 }
 
+
+/* ============================================================
+   ग्राहक मास्टर यादी — 💬 WhatsApp / 👁️ पहा / शेवटचा मेसेज कधी
+   मेसेज ग्राहकाच्या स्थितीनुसार (मजकूर बदलायचा असल्यास खालील WA_MASTER_LINES बदला)
+   ============================================================ */
+var WA_MASTER_LINES = {
+  /* पेमेंट अजून आलेले नाही → फॉर्म-प्राप्त + Activation रक्कम मेसेज (फोटोसह) — {PLACE} = 📍 गाव | तालुका | जिल्हा */
+  unpaid: null,   /* null = WA_FORM_LINES.body (फॉर्म प्रतिसादातील तोच मेसेज) */
+  /* पेमेंट आले, Key अजून दिली नाही */
+  paidNoKey: [
+    'पेमेंट यशस्वीरित्या प्राप्त झाले आहे. धन्यवाद! 😊',
+    '',
+    'आपल्याला सॉफ्टवेअरची Key लवकरच पाठवण्यात येईल.',
+    '',
+    'काही शंका असल्यास कृपया नि:संकोच संपर्क करा.',
+    '',
+    'धन्यवाद! 🙏'
+  ],
+  /* पेमेंट व Key दोन्ही झाले */
+  done: [
+    'GP Software वापरताना काही शंका किंवा अडचण असल्यास कृपया नि:संकोच संपर्क करा.',
+    '',
+    '🎬 वापर कसा करायचा (Video मार्गदर्शन):',
+    'https://youtu.be/nGbr8NNVE6Q',
+    '',
+    '📄 सविस्तर PDF मार्गदर्शक :',
+    'https://cdn.jsdelivr.net/gh/grampanchayat-management-system/software-download@main/guide.pdf',
+    '',
+    'धन्यवाद! 🙏'
+  ]
+};
+var masterView = [];
+
+function masterWaKind(m){
+  if(!m.paymentDone) return 'unpaid';
+  if(!m.keyGiven) return 'paidNoKey';
+  return 'done';
+}
+function buildMasterWaMessage(m){
+  var kind = masterWaKind(m);
+  var lines = WA_FORM_LINES.top.slice();
+  if(m.name){ lines = ['नमस्कार ' + m.name + ', 🙏', '']; }
+  var place = [];
+  if(m.village) place.push('गाव: ' + m.village);
+  if(m.taluka)  place.push('तालुका: ' + m.taluka);
+  if(m.jilha)   place.push('जिल्हा: ' + m.jilha);
+  if(kind === 'unpaid'){
+    /* फॉर्म प्रतिसादातील मूळ मेसेजच: "नमस्कार, 🙏" + 📍 ओळ + मजकूर */
+    var top = WA_FORM_LINES.top.slice();
+    if(place.length){ top.push('📍 ' + place.join(' | ')); top.push(''); }
+    return top.concat(WA_MASTER_LINES.unpaid || WA_FORM_LINES.body).join('\n');
+  }
+  if(place.length){ lines.push('📍 ' + place.join(' | ')); lines.push(''); }
+  return lines.concat(WA_MASTER_LINES[kind]).join('\n');
+}
+
+function sendMasterWhatsApp(i){
+  var m = masterView[i];
+  if(!m) return;
+  if(!m.mobile || m.mobile.length !== 10){
+    alert('या ग्राहकाचा मोबाईल नंबर बरोबर सापडला नाही' + (m.mobile ? ' ('+m.mobile+')' : '') + '.');
+    return;
+  }
+  var kind = masterWaKind(m);
+  var msg = buildMasterWaMessage(m);
+  var done = function(res){
+    if(res && res.ok === false){ alert('WhatsApp उघडता आले नाही: ' + (res.error || '')); return; }
+    waSentMark(m.mobile);
+    renderMaster();
+    if(res && res.hint) gpToast(res.hint);
+  };
+  var b = window.gpBridge;
+  if(kind === 'unpaid' && b && b.sendFlyerWhatsApp){
+    b.sendFlyerWhatsApp({ mobile: m.mobile, name: m.name, message: msg }).then(done);
+  } else if(kind !== 'unpaid' && b && b.sendTextWhatsApp){
+    b.sendTextWhatsApp({ mobile: m.mobile, name: m.name, message: msg }).then(done);
+  } else {
+    window.open('https://wa.me/91' + m.mobile + '?text=' + encodeURIComponent(msg), '_blank');
+    done({ ok: true });
+  }
+}
+function viewMasterChat(i){
+  var m = masterView[i];
+  if(!m) return;
+  if(!m.mobile || m.mobile.length !== 10){
+    alert('या ग्राहकाचा मोबाईल नंबर बरोबर सापडला नाही.');
+    return;
+  }
+  if(window.gpBridge && window.gpBridge.openWhatsAppChat){
+    window.gpBridge.openWhatsAppChat({ mobile: m.mobile, name: m.name }).then(function(res){
+      if(res && res.ok === false){ alert('WhatsApp उघडता आले नाही: ' + (res.error || '')); return; }
+      if(res && res.hint) gpToast(res.hint);
+    });
+  } else {
+    window.open('https://wa.me/91' + m.mobile, '_blank');
+  }
+}
+function masterWaCell(m, i){
+  if(!m.mobile || m.mobile.length !== 10) return '<span style="color:#8aa0b8">नंबर नाही</span>';
+  return '<div style="white-space:nowrap">'
+    + '<button onclick="sendMasterWhatsApp('+i+')" style="background:#25D366;color:#04210f;border:none;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer">💬 WhatsApp</button> '
+    + '<button onclick="viewMasterChat('+i+')" style="background:#1d4f91;color:#fff;border:none;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer">👁️ पहा</button>'
+    + '</div><div style="font-size:12px;margin-top:4px">' + waSentText(m.mobile) + '</div>';
+}
+
 function renderMaster(){
   var master = buildMasterList();
   var s = (document.getElementById('masterSearch').value||'').toLowerCase();
@@ -987,11 +1143,13 @@ function renderMaster(){
     });
   }
   var tbody = document.getElementById('masterTable');
-  if(!master.length){ tbody.innerHTML='<tr><td colspan="11" class="no-data">डेटा नाही.</td></tr>'; return; }
+  if(!master.length){ tbody.innerHTML='<tr><td colspan="12" class="no-data">डेटा नाही.</td></tr>'; masterView = []; return; }
+  masterView = master;
   function badge(v){ return v ? '<span class="badge b-yes">✔ होय</span>' : '<span class="badge b-no">✘ नाही</span>'; }
   tbody.innerHTML = master.map(function(m,i){
     return '<tr>'+
       '<td>'+(i+1)+'</td>'+
+      '<td>'+masterWaCell(m, i)+'</td>'+
       '<td class="mono">'+(m.mobile||'—')+'</td>'+
       '<td>'+(m.name||'—')+'</td>'+
       '<td>'+(m.village||'—')+'</td>'+
@@ -1052,12 +1210,117 @@ function generateKeys(){
   document.getElementById('keysGenerated').innerHTML =
     '<div class="key-out-box"><div class="lbl">'+rec.gpName+' — Machine Code '+rec.machineCode+(rec.mobile?(' — 📱 '+rec.mobile):'')+' — Lifetime</div>'+
     '<div class="kv">'+rec.key+'</div>'+
-    '<div style="text-align:center"><button class="btn btn-copy" onclick="copyKey(\''+rec.key+'\',this)">📋 Copy</button></div></div>';
+    '<div style="text-align:center"><button class="btn btn-copy" onclick="copyKey(\''+rec.key+'\',this)">📋 Copy</button></div>'+
+    '<div style="text-align:center;margin-top:10px">'+keyWaButtons(rec.key)+'</div></div>';
   /* GP_KEYFORM_RESET: पुढच्या customer साठी फॉर्म रिकामा (तयार झालेली Key वरच्या box मध्ये दिसत राहते) */
   ['gpName','gpCode','machineCode','customerName','customerMobile'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.value = '';
   });
 }
+
+/* ============================================================
+   Key थेट WhatsApp वर — 💬 Key पाठवा / 👁️ पहा / ✉️ Key कधी पाठवली
+   (मजकूर बदलायचा असल्यास buildKeyWaMessage मधील ओळी बदला)
+   ============================================================ */
+var WA_KEY_SENT = 'gp_wa_key_sent_v1';
+function waKeySentAll(){
+  try{ return JSON.parse(localStorage.getItem(WA_KEY_SENT) || '{}') || {}; }catch(e){ return {}; }
+}
+function waKeyMark(key){
+  if(!key) return;
+  try{
+    var all = waKeySentAll();
+    all[key] = Date.now();
+    localStorage.setItem(WA_KEY_SENT, JSON.stringify(all));
+  }catch(e){}
+}
+function waKeyText(key){
+  var ts = waKeySentAll()[key];
+  if(!ts) return '<span style="color:#8aa0b8">Key अजून पाठवली नाही</span>';
+  var d = new Date(ts), txt;
+  try{ txt = d.toLocaleString('mr-IN', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}); }
+  catch(e){ txt = d.toLocaleString(); }
+  return '<span style="color:#7be495">✉️ Key पाठवली: ' + txt + '</span>';
+}
+function findKeyRec(key){
+  for(var i=0;i<allKeys.length;i++){ if(allKeys[i].key === key) return allKeys[i]; }
+  return null;
+}
+function buildKeyWaMessage(rec){
+  var lines = [
+    'नमस्कार' + (rec.customer ? ' ' + rec.customer : '') + ', 🙏',
+    '',
+    'आपल्या GP Software ची Activation Key खालीलप्रमाणे आहे:',
+    '',
+    '🔑 ' + rec.key,
+    '',
+    'सॉफ्टवेअर उघडल्यावर Activation मध्ये ही Key टाकून सॉफ्टवेअर सुरू करा.'
+  ];
+  if(rec.machineCode) lines.push('💻 ही Key फक्त Machine Code ' + rec.machineCode + ' असलेल्या संगणकासाठी वैध आहे.');
+  lines = lines.concat([
+    '',
+    '🎬 वापर कसा करायचा (Video मार्गदर्शन):',
+    'https://youtu.be/nGbr8NNVE6Q',
+    '',
+    '📄 सविस्तर PDF मार्गदर्शक :',
+    'https://cdn.jsdelivr.net/gh/grampanchayat-management-system/software-download@main/guide.pdf',
+    '',
+    'काही शंका असल्यास कृपया नि:संकोच संपर्क करा.',
+    '',
+    'धन्यवाद! 🙏'
+  ]);
+  return lines.join('\n');
+}
+function refreshKeyStatus(){
+  var els = document.querySelectorAll('.kwa-status');
+  for(var i=0;i<els.length;i++){ els[i].innerHTML = waKeyText(els[i].getAttribute('data-key')); }
+}
+function sendKeyWhatsApp(key){
+  var rec = findKeyRec(key);
+  if(!rec) return;
+  var mobile = normMobile(rec.mobile);
+  if(!mobile || mobile.length !== 10){
+    alert('या Key सोबत ग्राहकाचा मोबाईल नंबर नाही. Key तयार करताना "Customer चा मोबाईल नंबर" भरा.');
+    return;
+  }
+  var msg = buildKeyWaMessage(rec);
+  var done = function(res){
+    if(res && res.ok === false){ alert('WhatsApp उघडता आले नाही: ' + (res.error || '')); return; }
+    waKeyMark(rec.key);
+    refreshKeyStatus();
+    if(res && res.hint) gpToast(res.hint);
+  };
+  if(window.gpBridge && window.gpBridge.sendTextWhatsApp){
+    window.gpBridge.sendTextWhatsApp({ mobile: mobile, name: rec.customer, message: msg }).then(done);
+  } else {
+    window.open('https://wa.me/91' + mobile + '?text=' + encodeURIComponent(msg), '_blank');
+    done({ ok: true });
+  }
+}
+function viewKeyChat(key){
+  var rec = findKeyRec(key);
+  if(!rec) return;
+  var mobile = normMobile(rec.mobile);
+  if(!mobile || mobile.length !== 10){ alert('या Key सोबत ग्राहकाचा मोबाईल नंबर नाही.'); return; }
+  if(window.gpBridge && window.gpBridge.openWhatsAppChat){
+    window.gpBridge.openWhatsAppChat({ mobile: mobile, name: rec.customer }).then(function(res){
+      if(res && res.ok === false){ alert('WhatsApp उघडता आले नाही: ' + (res.error || '')); return; }
+      if(res && res.hint) gpToast(res.hint);
+    });
+  } else {
+    window.open('https://wa.me/91' + mobile, '_blank');
+  }
+}
+function keyWaButtons(key){
+  var rec = findKeyRec(key);
+  var mobile = rec ? normMobile(rec.mobile) : '';
+  if(!mobile || mobile.length !== 10) return '<span style="color:#8aa0b8;font-size:12px">मोबाईल नंबर नाही</span>';
+  return '<div style="white-space:nowrap;display:inline-block">'
+    + '<button onclick="sendKeyWhatsApp(\'' + key + '\')" style="background:#25D366;color:#04210f;border:none;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer">💬 Key पाठवा</button> '
+    + '<button onclick="viewKeyChat(\'' + key + '\')" style="background:#1d4f91;color:#fff;border:none;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer">👁️ पहा</button>'
+    + '</div><div class="kwa-status" data-key="' + key + '" style="font-size:12px;margin-top:4px">' + waKeyText(key) + '</div>';
+}
+
 function copyKey(key, btn){
   navigator.clipboard.writeText(key).then(function(){
     btn.textContent='✅ Copied!'; btn.classList.add('copied');
@@ -1073,10 +1336,10 @@ function renderKeyTable(){
       (r.customer||'').toLowerCase().indexOf(s)!==-1 || (r.machineCode||'').toLowerCase().indexOf(s)!==-1 || (r.mobile||'').indexOf(s)!==-1;
   });
   var tb = document.getElementById('keysTable');
-  if(!filtered.length){ tb.innerHTML='<tr><td colspan="8" class="no-data">Keys नाहीत.</td></tr>'; return; }
+  if(!filtered.length){ tb.innerHTML='<tr><td colspan="9" class="no-data">Keys नाहीत.</td></tr>'; return; }
   tb.innerHTML = filtered.map(function(r){
     var d = new Date(r.generatedAt).toLocaleDateString('mr-IN');
-    return '<tr><td>'+(allKeys.indexOf(r)+1)+'</td><td class="mono" style="color:#FFD700">'+r.key+'</td><td>'+(r.gpName||'—')+'</td>'+
+    return '<tr><td>'+(allKeys.indexOf(r)+1)+'</td><td>'+keyWaButtons(r.key)+'</td><td class="mono" style="color:#FFD700">'+r.key+'</td><td>'+(r.gpName||'—')+'</td>'+
       '<td>'+(r.customer||'—')+'</td><td class="mono">'+(r.mobile||'—')+'</td>'+
       '<td style="color:#4CAF50;font-weight:700">'+(r.machineCode||'—')+'</td><td>'+d+'</td>'+
       '<td><button class="btn btn-copy" onclick="copyKey(\''+r.key+'\',this)">Copy</button></td></tr>';

@@ -272,6 +272,8 @@
     <button onclick="nextReceipt()">➡️ पुढील ग्राहक (नवीन पावती)</button>
     <button class="primary" onclick="saveCurrentReceipt();window.print()">🖨️ प्रिंट करा</button>
     <button class="primary" style="background:#25D366;border-color:#1da851;" onclick="sendReceiptOnWhatsApp()">📱 WhatsApp वर पाठवा</button>
+    <button onclick="viewReceiptChat()" style="background:#1d4f91;border-color:#143a6b;color:#fff;">👁️ चॅट पहा</button>
+    <span id="waStatus" style="font-size:12px;font-weight:600;background:#e8f7ee;padding:5px 10px;border-radius:12px;align-self:center;"></span>
   </div>
 
   <div id="listOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 12px;">
@@ -291,6 +293,7 @@
               <th style="padding:6px;border:1px solid #ddd;">गाव</th>
               <th style="padding:6px;border:1px solid #ddd;">मोबाईल</th>
               <th style="padding:6px;border:1px solid #ddd;">रक्कम (₹)</th>
+              <th style="padding:6px;border:1px solid #ddd;">WhatsApp</th>
             </tr>
           </thead>
           <tbody id="listTableBody"></tbody>
@@ -467,6 +470,59 @@ function amountInMarathiWords(num){
 }
 
 // पावतीचा फोटो क्लिपबोर्डवर कॉपी करतो — WhatsApp मध्ये Ctrl+V (पेस्ट) करून थेट पाठवता येईल
+
+/* ===== WhatsApp: "शेवटची पावती कधी पाठवली" नोंद + "चॅट पहा" (या डिव्हाइसवर, नंबरनुसार) ===== */
+var WA_RCPT_KEY = 'gp_wa_receipt_sent_v1';
+function rcptMobileOf(txt){
+  var d = String(txt || '').replace(/\D/g, '');
+  return d.length >= 10 ? d.slice(-10) : '';
+}
+function waRcptAll(){
+  try{ return JSON.parse(localStorage.getItem(WA_RCPT_KEY) || '{}') || {}; }catch(e){ return {}; }
+}
+function waRcptMark(mobile, no){
+  if(!mobile) return;
+  try{
+    var all = waRcptAll();
+    all[mobile] = { ts: Date.now(), no: no || '' };
+    localStorage.setItem(WA_RCPT_KEY, JSON.stringify(all));
+  }catch(e){}
+}
+function waRcptText(mobile){
+  var rec = mobile ? waRcptAll()[mobile] : null;
+  if(!rec) return '<span style="color:#6b7280">अजून पावती पाठवली नाही</span>';
+  var d = new Date(rec.ts), txt;
+  try{ txt = d.toLocaleString('mr-IN', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}); }
+  catch(e){ txt = d.toLocaleString(); }
+  return '<span style="color:#14532d">✉️ शेवटची: ' + txt + (rec.no ? ' (पावती ' + rec.no + ')' : '') + '</span>';
+}
+function refreshWaStatus(){
+  var el = document.getElementById('waStatus');
+  var f = document.getElementById('fldMobile');
+  if(el && f) el.innerHTML = waRcptText(rcptMobileOf(f.textContent));
+}
+function waRcptNotify(msg){
+  try{
+    if(window.gpToast) window.gpToast(msg);
+    else if(window.parent && window.parent !== window && window.parent.gpToast) window.parent.gpToast(msg);
+  }catch(e){}
+}
+/* 👁️ चॅट पहा — त्या नंबरचा WhatsApp चॅट उघडतो (आधी पाठवलेल्या पावत्या व आलेले रिप्लाय दिसतात) */
+function viewReceiptChat(mobileArg){
+  var m = mobileArg || rcptMobileOf((document.getElementById('fldMobile') || {}).textContent);
+  if(!m){ alert('पावतीत मोबाईल नंबर बरोबर लिहिलेला नाही.'); return; }
+  if(window.gpBridge && window.gpBridge.openWhatsAppChat){
+    window.gpBridge.openWhatsAppChat({ mobile: m, name: '' }).then(function(res){
+      if(res && res.ok === false){ alert('WhatsApp उघडता आले नाही: ' + (res.error || '')); return; }
+      if(res && res.hint) waRcptNotify(res.hint);
+    });
+  } else {
+    window.open('https://wa.me/91' + m, '_blank');
+  }
+}
+setInterval(refreshWaStatus, 1500);
+window.addEventListener('load', refreshWaStatus);
+
 function sendReceiptOnWhatsApp(){
   saveCurrentReceipt();
   if(!window.gpBridge){
@@ -490,6 +546,7 @@ function sendReceiptOnWhatsApp(){
     neededHeight: Math.ceil(r.top + r.height) + 20
   }).then(function(res){
     if(res && res.ok){
+      waRcptMark(rcptMobileOf(mobile), no); refreshWaStatus();
       if(res.hint){ if(window.gpToast) window.gpToast(res.hint); else if(window.parent && window.parent.gpToast) window.parent.gpToast(res.hint); }
     } else {
       alert('WhatsApp पाठवताना अडचण आली: ' + (res && res.error ? res.error : 'unknown'));
@@ -547,8 +604,12 @@ function renderList(){
       '<td style="padding:6px;border:1px solid #eee;">'+r.village+'</td>' +
       '<td style="padding:6px;border:1px solid #eee;">'+r.mobile+'</td>' +
       '<td style="padding:6px;border:1px solid #eee;text-align:right;">'+r.amount+'</td>' +
+      '<td style="padding:6px;border:1px solid #eee;white-space:nowrap;">' +
+        (rcptMobileOf(r.mobile) ? '<button onclick="viewReceiptChat(\''+rcptMobileOf(r.mobile)+'\')" style="background:#1d4f91;color:#fff;border:none;border-radius:12px;padding:4px 10px;font-size:12px;cursor:pointer;">👁️ पहा</button>' : '') +
+        '<div style="font-size:11px;margin-top:3px;">' + waRcptText(rcptMobileOf(r.mobile)) + '</div>' +
+      '</td>' +
     '</tr>';
-  }).join('') || '<tr><td colspan="6" style="padding:14px;text-align:center;color:#6b6455;">अजून कोणतीही पावती जतन झालेली नाही</td></tr>';
+  }).join('') || '<tr><td colspan="7" style="padding:14px;text-align:center;color:#6b6455;">अजून कोणतीही पावती जतन झालेली नाही</td></tr>';
   document.getElementById('listSummary').textContent = 'एकूण पावत्या: ' + list.length + '   |   एकूण जमा रक्कम: ₹' + total.toLocaleString('en-IN');
 }
 

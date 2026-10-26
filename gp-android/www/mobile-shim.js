@@ -177,6 +177,44 @@
     printReceipt: function(rec){ openReceipt(rec); },
     /* फॉर्म प्रतिसादातील "💬 WhatsApp" — त्या नंबरचा WhatsApp चॅट थेट उघडतो (फोटो + मेसेज भरून).
        native WaSend plugin नसेल/अयशस्वी झाला तर share sheet (जुनी पद्धत) वापरतो. */
+    /* फक्त मजकूर (फोटो नाही) — त्या नंबरचा चॅट मेसेज भरून उघडतो; अयशस्वी झाल्यास wa.me */
+    sendTextWhatsApp: function(payload){
+      payload = payload || {};
+      var phone = String(payload.mobile || '').replace(/\D/g, '');
+      if(phone.length === 10) phone = '91' + phone;
+      if(!phone) return Promise.resolve({ ok: false, error: 'मोबाईल नंबर नाही' });
+      function viaBrowser(){
+        var url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(payload.message || '');
+        if(P.Browser && P.Browser.open) return P.Browser.open({ url: url }).then(function(){ return { ok: true, hint: '✅ चॅट उघडला — फक्त WhatsApp मध्ये Send दाबा.' }; });
+        window.open(url, '_blank');
+        return Promise.resolve({ ok: true });
+      }
+      var WA = null;
+      try{ WA = (C.registerPlugin ? C.registerPlugin('WaSend') : P.WaSend) || null; }catch(e){ WA = null; }
+      if(!WA || !WA.send) return viaBrowser().catch(function(e){ return { ok: false, error: msgOf(e) }; });
+      return WA.send({ phone: phone, text: payload.message || '', fileUri: '' })
+        .then(function(){ return { ok: true, hint: '✅ चॅट उघडला — फक्त WhatsApp मध्ये Send दाबा.' }; })
+        .catch(function(){ return viaBrowser().catch(function(e){ return { ok: false, error: msgOf(e) }; }); });
+    },
+    /* "👁️ पहा" — त्या नंबरचा WhatsApp चॅट उघडतो (आधीचे मेसेज व रिप्लाय दिसतात) */
+    openWhatsAppChat: function(payload){
+      payload = payload || {};
+      var phone = String(payload.mobile || '').replace(/\D/g, '');
+      if(phone.length === 10) phone = '91' + phone;
+      if(!phone) return Promise.resolve({ ok: false, error: 'मोबाईल नंबर नाही' });
+      function viaBrowser(){
+        var url = 'https://wa.me/' + phone;
+        if(P.Browser && P.Browser.open) return P.Browser.open({ url: url }).then(function(){ return { ok: true }; });
+        window.open(url, '_blank');
+        return Promise.resolve({ ok: true });
+      }
+      var WA = null;
+      try{ WA = (C.registerPlugin ? C.registerPlugin('WaSend') : P.WaSend) || null; }catch(e){ WA = null; }
+      if(!WA || !WA.openChat) return viaBrowser().catch(function(e){ return { ok: false, error: msgOf(e) }; });
+      return WA.openChat({ phone: phone })
+        .then(function(){ return { ok: true }; })
+        .catch(function(){ return viaBrowser().catch(function(e){ return { ok: false, error: msgOf(e) }; }); });
+    },
     sendFlyerWhatsApp: function(payload){
       payload = payload || {};
       return fetch('gp-flyer.jpg')
@@ -224,7 +262,7 @@
   /* ---------- 6) सुरुवात ---------- */
   function start(){
     var sub = document.querySelector('header .sub');
-    if(sub) sub.textContent += ' · आवृत्ती v8 (WhatsApp निदान)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
+    if(sub) sub.textContent += ' · आवृत्ती v12 (WhatsApp Key)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
     var app = $('app'); if(app) app.style.display = 'block';   // computer प्रमाणे — पासवर्ड नाही; खरे संरक्षण = Cloud लॉगिन
     if(typeof initAll === 'function') initAll();
     var s = $('secretInput');

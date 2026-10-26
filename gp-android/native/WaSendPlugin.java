@@ -86,4 +86,33 @@ public class WaSendPlugin extends Plugin {
             call.reject(e.getMessage() == null ? "WhatsApp उघडता आले नाही" : e.getMessage());
         }
     }
+
+    /** "पहा" — त्या नंबरचा WhatsApp चॅट थेट उघडतो (मजकूर/फोटो न भरता). */
+    @PluginMethod
+    public void openChat(PluginCall call) {
+        String phone = call.getString("phone", "");
+        if (phone == null) phone = "";
+        phone = phone.replaceAll("\\D", "");
+        if (phone.length() == 10) phone = "91" + phone;
+        if (phone.isEmpty()) {
+            call.reject("नंबर नाही");
+            return;
+        }
+        String[] packages = new String[]{"com.whatsapp", "com.whatsapp.w4b"};
+        for (String pkg : packages) {
+            try {
+                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/" + phone));
+                i.setPackage(pkg);
+                getActivity().startActivity(i);
+                call.resolve();
+                return;
+            } catch (ActivityNotFoundException e) {
+                // पुढचे (Business) बघतो
+            } catch (Exception e) {
+                call.reject(e.getMessage() == null ? "WhatsApp उघडता आले नाही" : e.getMessage());
+                return;
+            }
+        }
+        call.reject("WhatsApp सापडले नाही");
+    }
 }
