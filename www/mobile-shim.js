@@ -58,17 +58,17 @@
     if(!P.Filesystem || !P.Share) return Promise.reject(new Error('हे फीचर फोनवर app मध्येच चालते.'));
     return P.Filesystem.writeFile({ path: 'export/' + o.filename, data: o.b64, directory: 'CACHE', recursive: true }).then(function(r){
       var phone = String(o.phone || '').replace(/\D/g, '');
-      function shareSheet(){
+      function shareSheet(reason){
         return P.Share.share({ title: o.title || o.filename, text: o.text || '', files: [r.uri], dialogTitle: 'WhatsApp निवडा' })
-          .then(function(){ return { ok: true, hint: phone.length >= 10 ? ('📲 WhatsApp निवडा आणि ' + (o.name ? o.name + ' — ' : '') + phone + ' हा चॅट निवडा.') : '' }; });
+          .then(function(){ return { ok: true, hint: phone.length >= 10 ? ('📲 WhatsApp निवडा आणि ' + (o.name ? o.name + ' — ' : '') + phone + ' हा चॅट निवडा.' + (reason ? '\n[थेट चॅट न उघडण्याचे कारण: ' + reason + ']' : '')) : '' }; });
       }
-      if(phone.length < 10) return shareSheet();
-      var WA = null;
-      try{ WA = (C.registerPlugin ? C.registerPlugin('WaSend') : P.WaSend) || null; }catch(e){ WA = null; }
-      if(!WA || !WA.send) return shareSheet();
+      if(phone.length < 10) return shareSheet('नंबर बरोबर नाही: ' + (o.phone || 'रिकामा'));
+      var WA = null, regErr = '';
+      try{ WA = (C.registerPlugin ? C.registerPlugin('WaSend') : P.WaSend) || null; }catch(e){ WA = null; regErr = msgOf(e); }
+      if(!WA || !WA.send) return shareSheet('WaSend plugin app मध्ये नाही ' + regErr);
       return WA.send({ phone: phone, text: o.text || '', fileUri: r.uri, mime: o.mime || 'image/jpeg' })
         .then(function(){ return { ok: true, hint: '✅ चॅट उघडला — फक्त WhatsApp मध्ये Send दाबा.' }; })
-        .catch(function(e){ return isCancel(e) ? { ok: true } : shareSheet(); });
+        .catch(function(e){ return isCancel(e) ? { ok: true } : shareSheet(msgOf(e)); });
     });
   }
   window.downloadFile = function(content, filename){
@@ -224,7 +224,7 @@
   /* ---------- 6) सुरुवात ---------- */
   function start(){
     var sub = document.querySelector('header .sub');
-    if(sub) sub.textContent += ' · आवृत्ती v7 (पावती + फॉर्म WhatsApp)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
+    if(sub) sub.textContent += ' · आवृत्ती v8 (WhatsApp निदान)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
     var app = $('app'); if(app) app.style.display = 'block';   // computer प्रमाणे — पासवर्ड नाही; खरे संरक्षण = Cloud लॉगिन
     if(typeof initAll === 'function') initAll();
     var s = $('secretInput');
