@@ -1,9 +1,28 @@
-# GP Software — Android app (Computer सारखेच Control Panel + Live Sync)
+# GP Software — मोबाईल (Android App)
 
-- Computer च्या software मधील सगळे tabs: डॅशबोर्ड, ग्राहक यादी, Key Generator, पेमेंट/पावती, फॉर्म, तक्रारी, सेटिंग्स.
-- Computer आणि फोन यांचा data एकच (Firebase live sync). Internet नसताना app चालतो, नेट आल्यावर आपोआप sync.
-- पावती फोनवर उघडते, "शेअर / WhatsApp" ने फोटो म्हणून पाठवता येते.
-- app मध्ये पासवर्ड आणि LICENSE_SECRET नाही. Secret एकदा Key Generator टॅबमध्ये टाकायचा (फक्त फोनवर साठवला जातो).
+`gp-mobile.html` चे Android app रूप. Firebase login, पावती, चावी नंबर आणि Live यादी — सगळे आधीसारखेच चालते.
+Firebase च्या फाईल्स app मध्येच bundle आहेत (CDN ची गरज नाही).
 
-## APK बनवणे
-GitHub वर हे files upload केल्यावर Actions आपोआप APK बनवते → Actions → run → Artifacts → GP-Software-APK.
+## APK मिळवण्याची सोपी पद्धत (Android Studio न घेता)
+
+1. https://github.com वर free account बनवा आणि **New repository** करा (नाव उदा. `gp-mobile`).
+2. या folder मधल्या **सगळ्या फाईल्स व folders** (`.github`, `www`, `assets`, `package.json`,
+   `package-lock.json`, `capacitor.config.json`, `.gitignore`) repo मध्ये **Add file → Upload files** ने टाका.
+   (`.github` folder दिसत नसेल तर तो थेट drag करा, किंवा File Manager मध्ये "hidden files" चालू करा.)
+3. **Commit** केल्यावर वरती **Actions** tab उघडा — "Build Android APK" आपोआप सुरू होते (साधारण 5–8 मिनिटे).
+4. Run हिरवा (✅) झाला की त्यावर क्लिक करा → खाली **Artifacts → GP-Software-APK** डाउनलोड करा.
+5. zip उघडून `app-debug.apk` फोनवर पाठवा → उघडा → "Install unknown apps" ला परवानगी द्या → Install.
+
+पुन्हा build करायचे असेल तर: **Actions → Build Android APK → Run workflow**.
+
+## बदल कसे करायचे
+
+App चा सगळा भाग `www/index.html` मध्ये आहे. ती फाईल बदलून GitHub वर पुन्हा upload करा —
+नवीन APK आपोआप तयार होईल.
+
+## अडचण आल्यास
+
+- **लॉगिन/Firestore चालत नाही:** Google Cloud Console → APIs & Services → Credentials मध्ये
+  या API key वर "HTTP referrer" restriction असेल तर `https://localhost/*` ला परवानगी द्या.
+- हा debug-signed APK आहे — स्वतःच्या/ऑफिसच्या फोनवर install करण्यासाठी पुरेसा आहे.
+  Play Store साठी release signing लागेल.

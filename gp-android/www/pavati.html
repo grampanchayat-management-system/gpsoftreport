@@ -490,7 +490,7 @@ function sendReceiptOnWhatsApp(){
     neededHeight: Math.ceil(r.top + r.height) + 20
   }).then(function(res){
     if(res && res.ok){
-      alert('✅ शेअर मेनू उघडला आहे — WhatsApp निवडून पावती पाठवा.');
+      if(res.hint){ if(window.gpToast) window.gpToast(res.hint); else if(window.parent && window.parent.gpToast) window.parent.gpToast(res.hint); }
     } else {
       alert('WhatsApp पाठवताना अडचण आली: ' + (res && res.error ? res.error : 'unknown'));
     }
