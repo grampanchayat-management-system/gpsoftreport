@@ -627,6 +627,7 @@ function mergeMap(oldMap, autoM, headers, rows){
    ============================================================ */
 var AUTO_SYNC_MS = 10000, autoSyncFails = 0, autoSyncBusy = false, autoTimer = null;
 var lastCsvSig = { form: '', complaint: '' };
+var lastWaSig = null;
 function csvSig(t){
   var h = 5381;
   for(var i = 0; i < t.length; i++){ h = ((h << 5) + h + t.charCodeAt(i)) | 0; }
@@ -667,6 +668,10 @@ function autoSyncTick(){
     syncOne('form', true, { quiet: true, auto: true }),
     syncOne('complaint', true, { quiet: true, auto: true })
   ]).then(function(res){
+    try{
+      var waSig = (localStorage.getItem(WA_SENT_KEY) || '') + '|' + (localStorage.getItem(WA_KEY_SENT) || '');
+      if(waSig !== lastWaSig){ if(lastWaSig !== null) { waRefreshAllViews(); try{ refreshKeyStatus(); }catch(e){} } lastWaSig = waSig; }
+    }catch(e){}
     var bad = res.filter(function(r){ return !r.ok && !r.skipped; });
     var changed = res.filter(function(r){ return r.ok && !r.unchanged; }).length;
     var t = new Date(), hms = ('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)+':'+('0'+t.getSeconds()).slice(-2);
@@ -943,6 +948,12 @@ var WA_SENT_KEY = 'gp_wa_sent_v1';
 function waSentAll(){
   try{ return JSON.parse(localStorage.getItem(WA_SENT_KEY) || '{}') || {}; }catch(e){ return {}; }
 }
+/* WhatsApp नोंद बदलली की ती दाखवणाऱ्या सर्व याद्या लगेच नव्याने काढतो (फॉर्म प्रतिसाद + ग्राहक मास्टर यादी) */
+function waRefreshAllViews(){
+  ['renderFormTable', 'renderMaster'].forEach(function(fn){
+    try{ if(typeof window[fn] === 'function') window[fn](); }catch(e){}
+  });
+}
 function waSentMark(mobile){
   if(!mobile) return;
   try{
@@ -950,7 +961,13 @@ function waSentMark(mobile){
     all[mobile] = Date.now();
     localStorage.setItem(WA_SENT_KEY, JSON.stringify(all));
   }catch(e){}
+  waRefreshAllViews();
 }
+/* दुसऱ्या विंडो / टॅब मधून नोंद बदलली तरी इथे दिसते */
+window.addEventListener('storage', function(e){
+  if(e.key === WA_SENT_KEY) waRefreshAllViews();
+  else if(e.key === WA_KEY_SENT){ try{ refreshKeyStatus(); }catch(x){} }
+});
 function waSentText(mobile){
   var ts = waSentAll()[mobile];
   if(!ts) return '<span style="color:#8aa0b8">अजून पाठवला नाही</span>';
@@ -1007,6 +1024,7 @@ function renderSheetTable(cache, theadId, tbodyId, search, actionHead, actionFn)
   cache.rows.forEach(function(r, idx){
     if(!s || r.join(' ').toLowerCase().indexOf(s)!==-1) list.push({r:r, idx:idx});
   });
+  list.reverse();   /* Sheet मध्ये नवीन ओळ खाली जोडली जाते — सगळ्यात नवीन वर दाखवतो */
   if(!list.length){ tbody.innerHTML='<tr><td colspan="'+(cache.headers.length+extra)+'" class="no-data">काही सापडलं नाही.</td></tr>'; return; }
   tbody.innerHTML = list.map(function(o){
     return '<tr>'+(extra ? '<td>'+actionFn(o.r, o.idx)+'</td>' : '')+cache.headers.map(function(h,i){ return '<td>'+(o.r[i]||'')+'</td>'; }).join('')+'</tr>';
@@ -1046,11 +1064,29 @@ function renderDashboard(){
 /* ============================================================
    MASTER LIST (merge everything by mobile number, fallback name)
    ============================================================ */
+/* ---- तारीख/वेळ वाचणे (dd/mm/yyyy [hh:mm[:ss] [AM/PM]], ISO, देवनागरी अंक) — "सगळ्यात नवीन वर" क्रमासाठी ---- */
+function parseAnyDate(v){
+  if(v == null) return 0;
+  if(typeof v === 'number') return v;
+  var s = String(v).trim();
+  if(!s) return 0;
+  s = s.replace(/[०-९]/g, function(d){ return '०१२३४५६७८९'.indexOf(d); });
+  var m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:[,\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?)?/);
+  if(m){
+    var h = +m[4] || 0;
+    if(m[7]){ var pm = /p/i.test(m[7]); if(pm && h < 12) h += 12; if(!pm && h === 12) h = 0; }
+    return new Date(+m[3], +m[2] - 1, +m[1], h, +m[5] || 0, +m[6] || 0).getTime();
+  }
+  var t = Date.parse(s);
+  return isNaN(t) ? 0 : t;
+}
+
 function buildMasterList(){
   var byMobile = {};
+  var seq = 0;
   function getRec(mobile, name){
     var key = mobile || ('name:'+normName(name));
-    if(!byMobile[key]) byMobile[key] = {mobile:mobile||'', name:name||'', village:'', taluka:'', jilha:'', person:'', designation:'', formFilled:false, keyGiven:false, keyVal:'', paymentDone:false, amount:0, receiptNo:'', complaint:false, complaintText:'', refName:'', refMobile:''};
+    if(!byMobile[key]) byMobile[key] = {mobile:mobile||'', name:name||'', village:'', taluka:'', jilha:'', person:'', designation:'', formFilled:false, keyGiven:false, keyVal:'', paymentDone:false, amount:0, receiptNo:'', complaint:false, complaintText:'', refName:'', refMobile:'', ts:0, seq:0};
     return byMobile[key];
   }
 
@@ -1062,6 +1098,8 @@ function buildMasterList(){
       var nm  = fm.name>=0 ? r[fm.name] : '';
       var rec = getRec(mob, nm);
       rec.formFilled = true;
+      rec.seq = ++seq;
+      var tf = fm.date>=0 ? parseAnyDate(r[fm.date]) : 0; if(tf > rec.ts) rec.ts = tf;
       if(!rec.name && nm) rec.name = nm;
       if(fm.village>=0 && r[fm.village]) rec.village = r[fm.village];
       if(fm.taluka>=0 && fm.taluka!==fm.village && r[fm.taluka]) rec.taluka = r[fm.taluka];
@@ -1080,6 +1118,8 @@ function buildMasterList(){
     var rec = getRec(mob, nm);
     rec.keyGiven = true;
     rec.keyVal = k.key;
+    rec.seq = ++seq;
+    var tk = parseAnyDate(k.generatedAt); if(tk > rec.ts) rec.ts = tk;
     if(!rec.name && nm) rec.name = nm;
     if(!rec.village && k.gpName) rec.village = k.gpName;
   });
@@ -1089,6 +1129,8 @@ function buildMasterList(){
     var mob = normMobile(p.mobile);
     var rec = getRec(mob, p.name);
     rec.paymentDone = true;
+    rec.seq = ++seq;
+    var tp = parseAnyDate(p.date); if(tp > rec.ts) rec.ts = tp;
     rec.amount += (parseFloat((p.amount||'0').toString().replace(/[^0-9.]/g,''))||0);
     rec.receiptNo = p.no;
     if(!rec.name && p.name) rec.name = p.name;
@@ -1103,12 +1145,16 @@ function buildMasterList(){
       var nm  = cm.name>=0 ? r[cm.name] : '';
       var rec = getRec(mob, nm);
       rec.complaint = true;
+      rec.seq = ++seq;
+      var tc = cm.date>=0 ? parseAnyDate(r[cm.date]) : 0; if(tc > rec.ts) rec.ts = tc;
       rec.complaintText = cm.text>=0 ? (r[cm.text]||'') : '';
       if(!rec.name && nm) rec.name = nm;
     });
   }
 
-  return Object.keys(byMobile).map(function(k){ return byMobile[k]; });
+  /* सगळ्यात नवीन वर */
+  return Object.keys(byMobile).map(function(k){ return byMobile[k]; })
+    .sort(function(a, b){ return (b.ts - a.ts) || (b.seq - a.seq); });
 }
 
 
@@ -1322,6 +1368,7 @@ function waKeyMark(key){
     all[key] = Date.now();
     localStorage.setItem(WA_KEY_SENT, JSON.stringify(all));
   }catch(e){}
+  try{ refreshKeyStatus(); }catch(e2){}
 }
 function waKeyText(key){
   var ts = waKeySentAll()[key];
@@ -1424,6 +1471,9 @@ function renderKeyTable(){
     return (r.key||'').toLowerCase().indexOf(s)!==-1 || (r.gpName||'').toLowerCase().indexOf(s)!==-1 ||
       (r.customer||'').toLowerCase().indexOf(s)!==-1 || (r.machineCode||'').toLowerCase().indexOf(s)!==-1 || (r.mobile||'').indexOf(s)!==-1;
   });
+  filtered = filtered.map(function(r){ return { r: r, i: allKeys.indexOf(r) }; })
+    .sort(function(a, b){ return (parseAnyDate(b.r.generatedAt) - parseAnyDate(a.r.generatedAt)) || (b.i - a.i); })
+    .map(function(o){ return o.r; });   /* सगळ्यात नवीन Key वर */
   var tb = document.getElementById('keysTable');
   if(!filtered.length){ tb.innerHTML='<tr><td colspan="9" class="no-data">Keys नाहीत.</td></tr>'; return; }
   tb.innerHTML = filtered.map(function(r){
@@ -1499,7 +1549,13 @@ function addPayment(){
 }
 function renderPayTable(){
   var s = (document.getElementById('paySearch').value||'').toLowerCase();
-  var list = allReceipts.slice().reverse().filter(function(r){
+  var list = allReceipts.map(function(r, i){ return { r: r, i: i }; })
+    .sort(function(a, b){
+      return (parseAnyDate(b.r.date) - parseAnyDate(a.r.date)) ||
+             String(b.r.no || '').localeCompare(String(a.r.no || ''), undefined, { numeric: true }) || (b.i - a.i);
+    })
+    .map(function(o){ return o.r; })   /* सगळ्यात नवीन पावती वर */
+    .filter(function(r){
     return !s || (r.name||'').toLowerCase().indexOf(s)!==-1 || (r.mobile||'').indexOf(s)!==-1 || (r.village||'').toLowerCase().indexOf(s)!==-1 || (r.no||'').toLowerCase().indexOf(s)!==-1;
   });
   var tbody = document.getElementById('payTable');
