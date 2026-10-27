@@ -118,6 +118,7 @@ input,select,textarea{font-size:16px !important}
 <header>
   <h1>🏛️ GP Software Report — Control Panel</h1>
   <div class="sub">फॉर्म प्रतिसाद + Key + पेमेंट/पावती + तक्रारी — सगळं एका ठिकाणी</div>
+  <div id="autoSyncNote" style="font-size:12px;color:#8bc34a;margin-top:4px"></div>
 </header>
 
 <nav id="tabNav">
@@ -178,11 +179,11 @@ input,select,textarea{font-size:16px !important}
     <div class="tbl-wrap">
       <table>
         <thead><tr>
-          <th>#</th><th>WhatsApp</th><th>मोबाईल</th><th>नाव</th><th>गाव</th>
+          <th>#</th><th>WhatsApp</th><th>मोबाईल</th><th>नाव</th><th>गाव</th><th>संपर्क व्यक्ती (पदनाम)</th>
           <th>फॉर्म</th><th>Key</th><th>Payment</th><th>पावती क्र.</th><th>तक्रार</th>
           <th>रेफरलचे नाव</th><th>रेफरलचा मोबाईल</th>
         </tr></thead>
-        <tbody id="masterTable"><tr><td colspan="12" class="no-data">डेटा नाही. सेटिंग्समध्ये Sheets जोडून Sync करा.</td></tr></tbody>
+        <tbody id="masterTable"><tr><td colspan="13" class="no-data">डेटा नाही. सेटिंग्समध्ये Sheets जोडून Sync करा.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -320,6 +321,7 @@ input,select,textarea{font-size:16px !important}
     </div>
     <div class="row">
       <div class="btn btn-gen" onclick="saveConfigAndSync()">💾 जतन करा + Sync करा</div>
+      <label style="display:block;margin-top:12px;font-size:14px"><input type="checkbox" id="autoSyncChk" checked onchange="setAutoSync(this.checked)"> 🔄 Auto Sync — दर 10 सेकंदाला Google Sheet (फॉर्म + तक्रारी) आपोआप Sync</label>
     </div>
   </div>
 
@@ -558,6 +560,8 @@ function autoMap(headers, type, rows){
     m.refMobile = guessCol(headers, REF_MOBILE_KEYS, MOBILE_AVOID);
     m.taluka    = guessCol(headers, ['taluka','तालुका','tehsil','tahsil','तहसील'], ['timestamp','date']);
     m.jilha     = guessCol(headers, ['district','jilha','जिल्हा','जिल्ह','zilla','zila'], ['timestamp','date']);
+    m.person      = guessCol(headers, ['आपले नाव','अर्जदाराचे नाव','अर्जदार','applicant','person'], ['timestamp','date','referral','रेफरल','reference']);
+    m.designation = guessCol(headers, ['पदनाम','designation','हुद्दा'], ['timestamp','date']);
   }
 
   if (type==='complaint'){
@@ -615,6 +619,80 @@ function mergeMap(oldMap, autoM, headers, rows){
 /* ============================================================
    FETCH / SYNC
    ============================================================ */
+/* ============================================================
+   AUTO SYNC — दर 10 सेकंदाला Google Sheet (फॉर्म + तक्रारी) आपोआप
+   • डेटा बदलला तरच टेबल/डॅशबोर्ड पुन्हा काढतो (स्क्रीन उगाच हलत नाही)
+   • अ‍ॅप लपलेले (minimize / background) किंवा नेट नसताना थांबतो, परत आल्यावर लगेच चालतो
+   • अयशस्वी झाल्यास वेळ वाढवत जातो (10 → 20 → 40 → 60 सेकंद), यशस्वी होताच पुन्हा 10 सेकंद
+   ============================================================ */
+var AUTO_SYNC_MS = 10000, autoSyncFails = 0, autoSyncBusy = false, autoTimer = null;
+var lastCsvSig = { form: '', complaint: '' };
+function csvSig(t){
+  var h = 5381;
+  for(var i = 0; i < t.length; i++){ h = ((h << 5) + h + t.charCodeAt(i)) | 0; }
+  return t.length + ':' + h;
+}
+function touchLastSync(){
+  config.lastSync = new Date().toISOString();
+  lsSet(LS_CONFIG, config);
+  var el = document.getElementById('lastSyncTxt');
+  if(el) el.textContent = 'शेवटचं Sync: ' + new Date(config.lastSync).toLocaleString('mr-IN');
+}
+function autoSyncEnabled(){
+  try{ return localStorage.getItem('gp_auto_sync') !== '0'; }catch(e){ return true; }
+}
+function setAutoSync(on){
+  try{ localStorage.setItem('gp_auto_sync', on ? '1' : '0'); }catch(e){}
+  autoSyncNote(on ? '🔄 Auto Sync चालू' : '⏸️ Auto Sync बंद', false);
+  if(on) autoSyncSoon(500);
+}
+function autoSyncNote(txt, bad){
+  var el = document.getElementById('autoSyncNote');
+  if(!el) return;
+  el.style.color = bad ? '#ff8a80' : '#8bc34a';
+  el.textContent = txt;
+}
+function autoSyncSoon(ms){
+  if(autoTimer) clearTimeout(autoTimer);
+  autoTimer = setTimeout(autoSyncTick, ms);
+}
+function autoSyncTick(){
+  if(!autoSyncEnabled()){ autoSyncNote('⏸️ Auto Sync बंद', false); autoSyncSoon(AUTO_SYNC_MS); return; }
+  if(autoSyncBusy || document.hidden || navigator.onLine === false || (!config.formUrl && !config.complaintUrl)){
+    autoSyncSoon(AUTO_SYNC_MS);
+    return;
+  }
+  autoSyncBusy = true;
+  Promise.all([
+    syncOne('form', true, { quiet: true, auto: true }),
+    syncOne('complaint', true, { quiet: true, auto: true })
+  ]).then(function(res){
+    var bad = res.filter(function(r){ return !r.ok && !r.skipped; });
+    var changed = res.filter(function(r){ return r.ok && !r.unchanged; }).length;
+    var t = new Date(), hms = ('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)+':'+('0'+t.getSeconds()).slice(-2);
+    if(bad.length){
+      autoSyncFails++;
+      autoSyncNote('⚠️ Auto Sync अयशस्वी (' + bad[0].label + ': ' + bad[0].error + ') — पुन्हा प्रयत्न चालू · ' + hms, true);
+    } else {
+      autoSyncFails = 0;
+      autoSyncNote('🔄 Auto Sync चालू — शेवटचा ' + hms + (changed ? ' · नवीन डेटा आला' : ''), false);
+    }
+  }).catch(function(e){
+    autoSyncFails++;
+    autoSyncNote('⚠️ Auto Sync त्रुटी: ' + ((e && e.message) || e), true);
+  }).then(function(){
+    autoSyncBusy = false;
+    autoSyncSoon(Math.min(60000, AUTO_SYNC_MS * Math.pow(2, Math.min(autoSyncFails, 3))));
+  });
+}
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) autoSyncSoon(300); });
+window.addEventListener('online', function(){ autoSyncSoon(500); });
+window.addEventListener('load', function(){
+  var c = document.getElementById('autoSyncChk');
+  if(c) c.checked = autoSyncEnabled();
+  autoSyncSoon(3000);
+});
+
 function syncSheets(userTriggered){
   syncOne('form', userTriggered);
   syncOne('complaint', userTriggered);
@@ -668,6 +746,12 @@ function syncOne(type, userTriggered, opts){
     .then(function(text){
       var rows = parseCSV(text);
       if(!rows.length) throw new Error('रिकामा प्रतिसाद');
+      var sig = csvSig(text);
+      if(opts && opts.auto && sig === lastCsvSig[type]){
+        touchLastSync();   /* डेटा तोच — स्क्रीन पुन्हा काढत नाही */
+        return {type:type,label:label,ok:true,count:rows.length-1,unchanged:true};
+      }
+      lastCsvSig[type] = sig;
       applySheetData(type, rows);
       if(say) alert(label+' Sheet यशस्वीरित्या Sync झाली — '+ (rows.length-1) +' नोंदी.');
       return {type:type,label:label,ok:true,count:rows.length-1};
@@ -726,9 +810,9 @@ function importManual(type){
 /* ============================================================
    COLUMN MAPPING UI
    ============================================================ */
-var FIELD_LABELS = {name:'नाव',mobile:'मोबाईल',village:'गाव',date:'दिनांक',text:'तक्रार मजकूर',status:'स्थिती',refName:'रेफरलचे नाव',refMobile:'रेफरलचा मोबाईल',taluka:'तालुका',jilha:'जिल्हा'};
+var FIELD_LABELS = {name:'नाव',mobile:'मोबाईल',village:'गाव',date:'दिनांक',text:'तक्रार मजकूर',status:'स्थिती',refName:'रेफरलचे नाव',refMobile:'रेफरलचा मोबाईल',taluka:'तालुका',jilha:'जिल्हा',person:'आपले नाव (अर्जदार)',designation:'पदनाम'};
 function renderMapBoxes(){
-  renderOneMapBox('formMapBox2', formCache, config.formMap, 'form', ['name','mobile','village','taluka','jilha','date','refName','refMobile']);
+  renderOneMapBox('formMapBox2', formCache, config.formMap, 'form', ['name','mobile','village','taluka','jilha','person','designation','date','refName','refMobile']);
   renderOneMapBox('complaintMapBox2', compCache, config.complaintMap, 'complaint', ['name','mobile','date','text','status']);
 }
 function renderOneMapBox(elId, cache, map, type, fields){
@@ -966,7 +1050,7 @@ function buildMasterList(){
   var byMobile = {};
   function getRec(mobile, name){
     var key = mobile || ('name:'+normName(name));
-    if(!byMobile[key]) byMobile[key] = {mobile:mobile||'', name:name||'', village:'', taluka:'', jilha:'', formFilled:false, keyGiven:false, keyVal:'', paymentDone:false, amount:0, receiptNo:'', complaint:false, complaintText:'', refName:'', refMobile:''};
+    if(!byMobile[key]) byMobile[key] = {mobile:mobile||'', name:name||'', village:'', taluka:'', jilha:'', person:'', designation:'', formFilled:false, keyGiven:false, keyVal:'', paymentDone:false, amount:0, receiptNo:'', complaint:false, complaintText:'', refName:'', refMobile:''};
     return byMobile[key];
   }
 
@@ -982,6 +1066,8 @@ function buildMasterList(){
       if(fm.village>=0 && r[fm.village]) rec.village = r[fm.village];
       if(fm.taluka>=0 && fm.taluka!==fm.village && r[fm.taluka]) rec.taluka = r[fm.taluka];
       if(fm.jilha>=0 && fm.jilha!==fm.village && fm.jilha!==fm.taluka && r[fm.jilha]) rec.jilha = r[fm.jilha];
+      if(fm.person>=0 && r[fm.person] && !rec.person) rec.person = r[fm.person];
+      if(fm.designation>=0 && r[fm.designation] && !rec.designation) rec.designation = r[fm.designation];
       if(fm.refName>=0 && r[fm.refName] && !rec.refName) rec.refName = r[fm.refName];
       if(fm.refMobile>=0 && r[fm.refMobile] && !rec.refMobile) rec.refMobile = normMobile(r[fm.refMobile]) || r[fm.refMobile];
     });
@@ -1138,12 +1224,14 @@ function renderMaster(){
       return (m.name||'').toLowerCase().indexOf(s)!==-1 ||
              (m.mobile||'').indexOf(s)!==-1 ||
              (m.village||'').toLowerCase().indexOf(s)!==-1 ||
+             (m.person||'').toLowerCase().indexOf(s)!==-1 ||
+             (m.designation||'').toLowerCase().indexOf(s)!==-1 ||
              (m.refName||'').toLowerCase().indexOf(s)!==-1 ||
              (m.refMobile||'').indexOf(s)!==-1;
     });
   }
   var tbody = document.getElementById('masterTable');
-  if(!master.length){ tbody.innerHTML='<tr><td colspan="12" class="no-data">डेटा नाही.</td></tr>'; masterView = []; return; }
+  if(!master.length){ tbody.innerHTML='<tr><td colspan="13" class="no-data">डेटा नाही.</td></tr>'; masterView = []; return; }
   masterView = master;
   function badge(v){ return v ? '<span class="badge b-yes">✔ होय</span>' : '<span class="badge b-no">✘ नाही</span>'; }
   tbody.innerHTML = master.map(function(m,i){
@@ -1153,6 +1241,7 @@ function renderMaster(){
       '<td class="mono">'+(m.mobile||'—')+'</td>'+
       '<td>'+(m.name||'—')+'</td>'+
       '<td>'+(m.village||'—')+'</td>'+
+      '<td>'+(m.person ? m.person + (m.designation ? ' <span style="color:#8aa0b8">('+m.designation+')</span>' : '') : (m.designation||'—'))+'</td>'+
       '<td>'+badge(m.formFilled)+'</td>'+
       '<td>'+(m.keyGiven ? '<span class="badge b-yes mono">'+m.keyVal+'</span>' : badge(false))+'</td>'+
       '<td>'+(m.paymentDone ? '<span class="badge b-yes">₹'+m.amount.toLocaleString('en-IN')+'</span>' : badge(false))+'</td>'+
@@ -1166,9 +1255,9 @@ function renderMaster(){
 function exportMasterCSV(){
   var master = buildMasterList();
   if(!master.length){ alert('डेटा नाही.'); return; }
-  var csv = 'Mobile,Name,Village,FormFilled,KeyGiven,Key,PaymentDone,Amount,ReceiptNo,Complaint,ReferralName,ReferralMobile\n';
+  var csv = 'Mobile,Name,Village,FormFilled,KeyGiven,Key,PaymentDone,Amount,ReceiptNo,Complaint,ReferralName,ReferralMobile,Taluka,District,Person,Designation\n';
   master.forEach(function(m){
-    csv += [m.mobile,m.name,m.village,m.formFilled,m.keyGiven,m.keyVal,m.paymentDone,m.amount,m.receiptNo,m.complaint,m.refName,m.refMobile]
+    csv += [m.mobile,m.name,m.village,m.formFilled,m.keyGiven,m.keyVal,m.paymentDone,m.amount,m.receiptNo,m.complaint,m.refName,m.refMobile,m.taluka,m.jilha,m.person,m.designation]
       .map(function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; }).join(',') + '\n';
   });
   downloadCSV(csv, 'gp_master_list_'+todayStr()+'.csv');

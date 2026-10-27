@@ -29,7 +29,7 @@
   var unsubs = [];
   var wiping = false, busyAdd = false, processingConflicts = false, bumping = false;
   var pushed = {};   // या session मध्ये आधीच पाठवलेल्या नोंदी (पुन्हा पाठवू नये म्हणून)
-  var cloud = { rawR: null, rawK: null, receipts: null, keys: null, counters: null, rServer: false, kServer: false, epochOk: false };
+  var cloud = { rawR: null, rawK: null, receipts: null, keys: null, counters: null, rServer: false, kServer: false, epochOk: false, wa: null };
 
   function $(id){ return document.getElementById(id); }
   function g(name){ return window[name]; }
@@ -296,11 +296,80 @@
     });
   };
 
+
+  /* ---------- WhatsApp "शेवटचा मेसेज कधी" नोंद — computer व मोबाईल दोन्हीवर एकच ---------- */
+  /* local नोंदी (localStorage) cloud मध्ये meta/waSent वर जातात; दुसऱ्या डिव्हाइसची नवीन नोंद आली की इथे उतरते.
+     प्रत्येक नंबर/Key साठी जास्त ताजी वेळ जिंकते. */
+  var WA_LOGS = [
+    { ls: 'gp_wa_sent_v1',          p: 'm' },   // फॉर्म प्रतिसाद + ग्राहक यादी: नंबरनुसार
+    { ls: 'gp_wa_key_sent_v1',      p: 'k' },   // Key: Key नुसार
+    { ls: 'gp_wa_receipt_sent_v1',  p: 'r' }    // पावती: नंबरनुसार {ts, no}
+  ];
+  var waTimer = null, waWarned = false;
+  function waRef(){ return db.collection('meta').doc('waSent'); }
+  function waTsOf(v){ return (v && typeof v === 'object') ? (Number(v.ts) || 0) : (Number(v) || 0); }
+  function waLocalAll(){
+    var out = {};
+    WA_LOGS.forEach(function(l){
+      var o = readJSON(l.ls, {});
+      Object.keys(o).forEach(function(k){ out[l.p + '|' + k] = o[k]; });
+    });
+    return out;
+  }
+  function waErr(err){
+    console.warn('WA log sync', err);
+    if(waWarned) return;
+    waWarned = true;
+    var code = (err && err.code) || '';
+    var msg = code === 'permission-denied'
+      ? 'WhatsApp नोंद cloud वर साठवता येत नाही — Firestore Rules मध्ये meta/waSent ला परवानगी द्या.'
+      : 'WhatsApp नोंद cloud sync त्रुटी: ' + ((err && err.message) ? err.message : code);
+    try{ if(typeof g('gpToast') === 'function') g('gpToast')(msg); }catch(e){}
+  }
+  function waPush(){
+    if(!ready() || !cloud.wa) return;
+    var local = waLocalAll(), changed = {}, n = 0;
+    Object.keys(local).forEach(function(k){
+      if(waTsOf(local[k]) > waTsOf(cloud.wa[k])){ changed[k] = local[k]; n++; }
+    });
+    if(!n) return;
+    waRef().set({ log: changed }, { merge: true }).then(function(){
+      Object.keys(changed).forEach(function(k){ if(cloud.wa) cloud.wa[k] = changed[k]; });
+    }).catch(waErr);
+  }
+  function waRefreshUI(){
+    ['renderFormTable', 'renderMaster', 'renderKeyTable', 'refreshKeyStatus', 'refreshWaStatus'].forEach(function(fn){
+      try{ if(typeof window[fn] === 'function') window[fn](); }catch(e){}
+    });
+  }
+  function onWaLog(snap){
+    var log = (snap.exists && snap.data() && snap.data().log) || {};
+    cloud.wa = log;
+    var by = {}, changed = false;
+    WA_LOGS.forEach(function(l){ by[l.p] = { ls: l.ls, data: readJSON(l.ls, {}), dirty: false }; });
+    Object.keys(log).forEach(function(k){
+      var i = k.indexOf('|');
+      if(i < 1) return;
+      var b = by[k.slice(0, i)], id = k.slice(i + 1);
+      if(!b) return;
+      if(waTsOf(log[k]) > waTsOf(b.data[id])){ b.data[id] = log[k]; b.dirty = true; changed = true; }
+    });
+    WA_LOGS.forEach(function(l){
+      var b = by[l.p];
+      if(b.dirty){ try{ localStorage.setItem(b.ls, JSON.stringify(b.data)); }catch(e){} }
+    });
+    if(changed) waRefreshUI();
+    waPush();   // या डिव्हाइसवरच्या नवीन नोंदी cloud ला
+  }
+  CS._wa = { push: waPush, onLog: onWaLog };
+  window.addEventListener('storage', function(e){ if(e.key && /^gp_wa_/.test(e.key)) waPush(); });
+
   /* ---------- listeners ---------- */
   function stopListeners(){
     unsubs.forEach(function(u){ try{ u(); }catch(e){} });
     unsubs = [];
-    cloud = { rawR: null, rawK: null, receipts: null, keys: null, counters: null, rServer: false, kServer: false, epochOk: false };
+    if(waTimer){ clearInterval(waTimer); waTimer = null; }
+    cloud = { rawR: null, rawK: null, receipts: null, keys: null, counters: null, rServer: false, kServer: false, epochOk: false, wa: null };
     pushed = {};
   }
   function onListenErr(what){
@@ -318,6 +387,8 @@
     unsubs.push(db.collection(COL_K).onSnapshot({ includeMetadataChanges: true }, onKeys, onListenErr('Keys')));
     unsubs.push(countersRef().onSnapshot({ includeMetadataChanges: true }, onCounters, onListenErr('Counter')));
     unsubs.push(cfgRef().onSnapshot({ includeMetadataChanges: true }, onCfg, onListenErr('Config')));
+    unsubs.push(waRef().onSnapshot(onWaLog, waErr));   // WhatsApp नोंद (त्रुटी आली तरी बाकी sync चालू राहतो)
+    waTimer = setInterval(waPush, 3000);
     setTimeout(function(){
       if(CS.user && CS.status === 'connecting'){ setStatus('offline'); CS.diagnose(); }
     }, 8000);

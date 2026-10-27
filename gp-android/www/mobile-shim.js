@@ -262,7 +262,7 @@
   /* ---------- 6) सुरुवात ---------- */
   function start(){
     var sub = document.querySelector('header .sub');
-    if(sub) sub.textContent += ' · आवृत्ती v12 (WhatsApp Key)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
+    if(sub) sub.textContent += ' · आवृत्ती v15 (नाव + पदनाम)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
     var app = $('app'); if(app) app.style.display = 'block';   // computer प्रमाणे — पासवर्ड नाही; खरे संरक्षण = Cloud लॉगिन
     if(typeof initAll === 'function') initAll();
     var s = $('secretInput');
