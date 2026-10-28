@@ -113,7 +113,7 @@
     var m = $('cloudMsg');
     if(!m) return;
     m.textContent = msg || '';
-    m.style.color = isErr ? '#ff8a80' : '#8bc34a';
+    m.style.color = isErr ? '#b91c1c' : '#15803d';
   }
   function authErrText(e){
     var c = (e && e.code) || '';
@@ -128,13 +128,15 @@
     if($('cloudCard')) return;
     var css = document.createElement('style');
     css.textContent =
-      '.cloud-pill{display:inline-block;padding:4px 12px;border-radius:14px;font-size:12px;font-weight:700;cursor:pointer;background:#333;color:#ccc;border:1px solid #555}' +
-      '.cloud-pill.online{background:#1b5e20;color:#c8e6c9;border-color:#2e7d32}' +
-      '.cloud-pill.offline,.cloud-pill.connecting{background:#4e3b00;color:#ffe082;border-color:#8d6e00}' +
-      '.cloud-pill.error{background:#5c1a1a;color:#ffcdd2;border-color:#b71c1c}' +
-      '.cloud-pill.off{background:#0f3460;color:#ffd700;border-color:#1565c0}' +
-      '.cloud-pill.syncbtn{background:#0f3460;color:#4fc3f7;border-color:#1565c0}' +
-      '.cloud-pill.syncbtn.busy{opacity:.6;pointer-events:none}';
+      '.cloud-pill{display:inline-flex;align-items:center;padding:5px 13px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.32);transition:background .15s,transform .08s}' +
+      '.cloud-pill:hover{background:rgba(255,255,255,.24)}' +
+      '.cloud-pill.online{background:rgba(34,197,94,.22);color:#dcfce7;border-color:rgba(74,222,128,.6)}' +
+      '.cloud-pill.offline,.cloud-pill.connecting{background:rgba(245,158,11,.22);color:#fef3c7;border-color:rgba(251,191,36,.6)}' +
+      '.cloud-pill.error{background:rgba(239,68,68,.25);color:#fee2e2;border-color:rgba(248,113,113,.7)}' +
+      '.cloud-pill.off{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.32)}' +
+      '.cloud-pill.syncbtn{background:#fff;color:#0b3c78;border-color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}' +
+      '.cloud-pill.syncbtn:hover{background:#eaf2ff}' +
+      '.cloud-pill.syncbtn.busy{opacity:.65;pointer-events:none}';
     document.head.appendChild(css);
 
     var hdr = document.querySelector('header');
@@ -155,7 +157,7 @@
       sync.addEventListener('click', function(){ CS.syncSheetsNow(); });
       var note = document.createElement('div');
       note.id = 'hdrSyncNote';
-      note.style.cssText = 'flex-basis:100%;font-size:12px;color:#aaa';
+      note.style.cssText = 'flex-basis:100%;font-size:12px;color:#bcd4f3';
       row.appendChild(pill); row.appendChild(sync); row.appendChild(note);
       hdr.appendChild(row);
     }
@@ -175,10 +177,10 @@
           '<div class="row"><div class="btn btn-gen" id="cloudLoginBtn">🔐 लॉगिन करा</div></div>' +
         '</div>' +
         '<div id="cloudLoggedIn" style="display:none">' +
-          '<div class="fg"><label>लॉगिन केलेले खाते</label><div id="cloudUser" style="font-weight:700;color:#ffd700"></div></div>' +
+          '<div class="fg"><label>लॉगिन केलेले खाते</label><div id="cloudUser" style="font-weight:700;color:var(--brand)"></div></div>' +
           '<div class="fg"><label>स्थिती</label><div id="cloudStatusTxt"></div></div>' +
-          '<div class="row"><div class="btn" id="cloudDiagBtn" style="background:#0f3460;color:#fff">🔍 कनेक्शन तपासा</div>' +
-          '<div class="btn" id="cloudLogoutBtn" style="background:#333;color:#fff">🚪 लॉगआऊट</div></div>' +
+          '<div class="row"><div class="btn btn-blue" id="cloudDiagBtn">🔍 कनेक्शन तपासा</div>' +
+          '<div class="btn btn-grey" id="cloudLogoutBtn">🚪 लॉगआऊट</div></div>' +
         '</div>' +
         '<div id="cloudMsg" style="margin-top:10px;font-size:13px;white-space:pre-line"></div>';
       tab.insertBefore(card, tab.firstChild);
@@ -203,7 +205,7 @@
     if(!btn || btn.classList.contains('busy') || typeof syncBoth !== 'function') return;
     btn.classList.add('busy');
     btn.textContent = '⏳ Sync होत आहे…';
-    if(note){ note.style.color = '#aaa'; note.textContent = ''; }
+    if(note){ note.style.color = '#bcd4f3'; note.textContent = ''; }
     return syncBoth().then(function(res){
       var parts = [], bad = false;
       res.forEach(function(r){

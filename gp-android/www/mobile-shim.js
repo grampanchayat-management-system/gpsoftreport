@@ -135,15 +135,15 @@
     closeReceipt();
     overlay = document.createElement('div');
     overlay.id = 'rcOverlay';
-    overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;background:#e9e4d6;display:flex;flex-direction:column;';
+    overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;background:#eef2f8;display:flex;flex-direction:column;';
     var bar = document.createElement('div');
-    bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top,0px));background:#16213e;color:#fff;font-family:inherit;';
+    bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top,0px));background:linear-gradient(115deg,#072a55,#0b3c78 55%,#1558ad);color:#fff;font-family:inherit;box-shadow:0 2px 10px rgba(7,42,85,.3);';
     bar.innerHTML =
-      '<button id="rcBack" style="background:none;border:1px solid #0f3460;color:#fff;border-radius:18px;padding:8px 14px;font-size:14px;font-weight:700">← मागे</button>' +
-      '<div style="flex:1;font-weight:700;font-size:14px;color:#ffd700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🧾 ' + (rec.no || 'पावती') + '</div>' +
+      '<button id="rcBack" style="background:none;border:1px solid rgba(255,255,255,.45);color:#fff;border-radius:18px;padding:8px 14px;font-size:14px;font-weight:700">← मागे</button>' +
+      '<div style="flex:1;font-weight:700;font-size:14px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🧾 ' + (rec.no || 'पावती') + '</div>' +
       '<button id="rcShare" style="background:#25D366;border:none;color:#04210f;border-radius:18px;padding:8px 14px;font-size:14px;font-weight:700">📤 शेअर / WhatsApp</button>';
     frame = document.createElement('iframe');
-    frame.style.cssText = 'flex:1;border:0;width:100%;background:#e9e4d6;';
+    frame.style.cssText = 'flex:1;border:0;width:100%;background:#eef2f8;';
     frame.setAttribute('title', 'पावती');
     frame.onload = function(){
       var win = frame && frame.contentWindow;
@@ -262,7 +262,7 @@
   /* ---------- 6) सुरुवात ---------- */
   function start(){
     var sub = document.querySelector('header .sub');
-    if(sub) sub.textContent += ' · आवृत्ती v17 (यादी आपोआप अपडेट)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
+    if(sub) sub.textContent += ' · आवृत्ती v18 (नवीन थीम)';   // नवीन APK install झाला आहे का हे ओळखण्यासाठी
     var app = $('app'); if(app) app.style.display = 'block';   // computer प्रमाणे — पासवर्ड नाही; खरे संरक्षण = Cloud लॉगिन
     if(typeof initAll === 'function') initAll();
     var s = $('secretInput');

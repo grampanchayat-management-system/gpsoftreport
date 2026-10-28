@@ -17,7 +17,18 @@ main = mains[0]
 bak = main.with_suffix('.java.bak')
 plugin_dst = main.parent / 'WaSendPlugin.java'
 
+res_values = root / 'android' / 'app' / 'src' / 'main' / 'res' / 'values'
+colors_dst = res_values / 'colors.xml'
+COLORS = '''<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#0B3C78</color>
+    <color name="colorPrimaryDark">#072A55</color>
+    <color name="colorAccent">#F59E0B</color>
+</resources>
+'''
+
 if '--remove' in sys.argv:
+    if colors_dst.exists() and 'GPTHEME' in colors_dst.read_text(encoding='utf-8'): colors_dst.unlink()
     if plugin_dst.exists(): plugin_dst.unlink()
     if bak.exists():
         shutil.copyfile(bak, main)
@@ -42,4 +53,12 @@ new = '''public class MainActivity extends BridgeActivity {
     }
 }'''
 main.write_text(src.replace(old, new), encoding='utf-8')
+# ब्रँड रंग (स्टेटस बार इ.) — फाइल आधीपासून असेल तर हात लावत नाही
+try:
+    if not colors_dst.exists():
+        res_values.mkdir(parents=True, exist_ok=True)
+        colors_dst.write_text(COLORS.replace('<resources>', '<resources>\n    <!-- GPTHEME -->'), encoding='utf-8')
+        print('ब्रँड रंग जोडले:', colors_dst)
+except Exception as e:
+    print('रंग जोडता आले नाहीत (दुर्लक्ष):', e)
 print('WaSend plugin जोडला:', plugin_dst)
