@@ -138,6 +138,12 @@ tbody tr:last-child td{border-bottom:none}
 a{color:var(--brand-2)}
 .pill{display:inline-block;background:var(--surface-2);color:var(--muted);border:1px solid var(--line);padding:3px 11px;border-radius:20px;font-size:11.5px;margin-right:6px}
 
+/* ---------- पेमेंट नोंदवा खिडकी ---------- */
+.modal-bg{position:fixed;inset:0;background:rgba(10,25,50,.55);display:none;align-items:center;justify-content:center;z-index:100001;padding:16px}
+.modal-box{background:var(--surface);border-radius:16px;padding:22px 24px;max-width:500px;width:100%;box-shadow:var(--sh-2);max-height:92vh;overflow:auto}
+.modal-box h3{color:var(--brand);font-size:17px;margin-bottom:12px}
+.modal-who{background:var(--brand-soft);border:1px solid var(--brand-soft-2);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13.5px;line-height:1.7}
+
 /* ---------- छोटी स्क्रीन (मोबाईल) ---------- */
 @media (max-width:760px){
   header{padding:16px 16px 14px}
@@ -1125,7 +1131,7 @@ function parseAnyDate(v){
   var s = String(v).trim();
   if(!s) return 0;
   s = s.replace(/[०-९]/g, function(d){ return '०१२३४५६७८९'.indexOf(d); });
-  var m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:[,\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?)?/);
+  var m = s.match(/^(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{4})(?:[,\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?)?/);
   if(m){
     var h = +m[4] || 0;
     if(m[7]){ var pm = /p/i.test(m[7]); if(pm && h < 12) h += 12; if(!pm && h === 12) h = 0; }
@@ -1316,6 +1322,65 @@ function masterWaCell(m, i){
     + '</div><div style="font-size:12px;margin-top:4px">' + waSentText(m.mobile) + '</div>';
 }
 
+/* ============================================================
+   💰 पेमेंट नोंदवा — ग्राहक मास्टर यादीतून एका क्लिकवर
+   नोंद → पावती तयार (नाव, गाव, तालुका, जिल्हा, मोबाईल, रक्कम भरलेली) → पावती उघडते → WhatsApp वर पाठवा
+   ============================================================ */
+var DEFAULT_SOFTWARE_PRICE = 4999;   /* सॉफ्टवेअरची नेहमीची किंमत — बदलायची असल्यास इथे */
+var payModalIdx = -1;
+function pmEsc(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function pmLocalDate(){
+  var d = new Date(), p = function(n){ return ('0' + n).slice(-2); };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function openPayModal(i){
+  var m = masterView[i];
+  if(!m) return;
+  if(!m.mobile || m.mobile.length !== 10){ alert('या ग्राहकाचा मोबाईल नंबर बरोबर सापडला नाही.'); return; }
+  if(m.paymentDone){ alert('या ग्राहकाचे पेमेंट आधीच नोंदवलेले आहे.'); return; }
+  payModalIdx = i;
+  var place = [m.village, m.taluka ? 'ता. ' + m.taluka : '', m.jilha ? 'जि. ' + m.jilha : ''].filter(Boolean).join(', ');
+  document.getElementById('payModalWho').innerHTML =
+    '<b>' + pmEsc(m.person || m.name || '—') + '</b>' + (m.designation ? ' (' + pmEsc(m.designation) + ')' : '') +
+    (place ? '<br>📍 ' + pmEsc(place) : '') + '<br>📱 ' + pmEsc(m.mobile);
+  document.getElementById('pmAmount').value = DEFAULT_SOFTWARE_PRICE;
+  document.getElementById('pmType').selectedIndex = 0;
+  document.getElementById('payModal').style.display = 'flex';
+}
+function closePayModal(){
+  document.getElementById('payModal').style.display = 'none';
+  payModalIdx = -1;
+}
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closePayModal(); });
+function confirmPayModal(){
+  var m = masterView[payModalIdx];
+  if(!m){ closePayModal(); return; }
+  var amt = parseFloat(document.getElementById('pmAmount').value);
+  if(!amt || amt <= 0){ alert('रक्कम बरोबर टाका'); return; }
+  var dup = allReceipts.some(function(r){ return normMobile(r.mobile) === m.mobile; });
+  if(dup && !confirm('या मोबाईल नंबरची पावती आधीच आहे. तरीही नवीन पावती करायची?')) return;
+  var n = parseInt(localStorage.getItem(LS_NEXT_NO), 10) || 1;
+  var rec = {
+    no: formatReceiptNo(n),
+    date: pmLocalDate(),
+    name: m.person || m.name || '',
+    village: m.village || m.name || '',
+    taluka: m.taluka || '',
+    jilha: m.jilha || '',
+    mobile: m.mobile,
+    amount: String(amt),
+    amountWords: '',
+    payType: document.getElementById('pmType').value
+  };
+  allReceipts.push(rec);
+  lsSet(LS_RECEIPTS, allReceipts);
+  localStorage.setItem(LS_NEXT_NO, String(n + 1));
+  closePayModal();
+  renderPayTable(); renderDashboard(); renderMaster();
+  try{ var pn = document.getElementById('payNo'); if(pn) pn.value = nextReceiptPreview(); }catch(e){}
+  printReceiptByNo(rec.no);
+}
+
 function renderMaster(){
   var master = buildMasterList();
   var s = (document.getElementById('masterSearch').value||'').toLowerCase();
@@ -1344,7 +1409,7 @@ function renderMaster(){
       '<td>'+(m.person ? m.person + (m.designation ? ' <span style="color:var(--muted)">('+m.designation+')</span>' : '') : (m.designation||'—'))+'</td>'+
       '<td>'+badge(m.formFilled)+'</td>'+
       '<td>'+(m.keyGiven ? '<span class="badge b-yes mono">'+m.keyVal+'</span>' : badge(false))+'</td>'+
-      '<td>'+(m.paymentDone ? '<span class="badge b-yes">₹'+m.amount.toLocaleString('en-IN')+'</span>' : badge(false))+'</td>'+
+      '<td>'+(m.paymentDone ? '<span class="badge b-yes">₹'+m.amount.toLocaleString('en-IN')+'</span>' : badge(false) + ((m.mobile && m.mobile.length===10) ? '<div style="margin-top:6px"><button class="btn btn-green" style="padding:5px 11px;font-size:12px;min-height:0" onclick="openPayModal('+i+')">💰 पेमेंट नोंदवा</button></div>' : ''))+'</td>'+
       '<td>'+(m.receiptNo||'—')+'</td>'+
       '<td>'+(m.complaint ? '<span class="badge b-no" title="'+(m.complaintText||'').replace(/"/g,'')+'">⚠ आहे</span>' : badge(false))+'</td>'+
       '<td>'+(m.refName||'—')+'</td>'+
@@ -1754,5 +1819,21 @@ function initAll(){
 <script src="lib/html2canvas.min.js"></script>
 <script src="cloudsync.js"></script>
 <script src="mobile-shim.js"></script>
+<!-- पेमेंट नोंदवा (ग्राहक मास्टर यादीतून) -->
+<div id="payModal" class="modal-bg" onclick="if(event.target===this) closePayModal()">
+  <div class="modal-box">
+    <h3>💰 पेमेंट नोंदवा</h3>
+    <div id="payModalWho" class="modal-who"></div>
+    <div class="fgrid" style="grid-template-columns:1fr 1fr">
+      <div class="fg"><label>रक्कम (₹) *</label><input type="number" id="pmAmount" value="4999"></div>
+      <div class="fg"><label>देयक प्रकार</label><select id="pmType"><option>UPI</option><option>रोख</option><option>बँक ट्रान्सफर</option></select></div>
+    </div>
+    <div class="hint y">पैसे तुमच्या UPI / PhonePe मध्ये आले आहेत हे आधी तपासा. "नोंद करा" दाबल्यावर पावती तयार होते आणि भरून उघडते — तिथून WhatsApp वर पाठवा.</div>
+    <div class="row" style="justify-content:flex-end">
+      <div class="btn btn-grey" onclick="closePayModal()">रद्द</div>
+      <div class="btn btn-green" onclick="confirmPayModal()">✅ नोंद करा व पावती उघडा</div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
