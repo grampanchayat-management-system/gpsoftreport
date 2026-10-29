@@ -161,6 +161,26 @@ a{color:var(--brand-2)}
   .fgrid{grid-template-columns:1fr}
   .maprow{grid-template-columns:1fr}
 }
+
+/* ---------- आडवी स्क्रीन (फोन landscape) — कमी उंचीला बसवणे ---------- */
+@media (max-height:520px) and (orientation:landscape){
+  header{padding:8px 18px 10px;gap:4px 10px}
+  header h1{font-size:16px;gap:9px;flex:1 1 auto}
+  header h1 .logo{width:32px;height:32px;font-size:17px;border-radius:9px}
+  header h1 small{display:none}
+  header .sub,#autoSyncNote,#hdrSyncNote{font-size:11px !important}
+  nav{padding:0 10px}
+  nav button{padding:10px 12px 8px;font-size:12.5px}
+  main{padding:12px 16px 24px}
+  .card{padding:14px 16px;margin-bottom:14px}
+  .card h2{margin-bottom:12px;padding-bottom:9px;font-size:15px}
+  .stats{grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px}
+  .stat{padding:14px 8px 12px}
+  .stat .sn{font-size:24px}
+  .stat .sl{font-size:11px}
+  .btn{min-height:38px}
+  .modal-box{max-height:94vh;padding:16px 20px}
+}
 </style>
 <style>
 /* ===== Android (मोबाईल) ===== */
@@ -169,6 +189,9 @@ header{padding:calc(16px + env(safe-area-inset-top,0px)) 16px 16px}
 main{padding-bottom:calc(28px + env(safe-area-inset-bottom,0px))}
 input,select,textarea{font-size:16px !important}
 .btn{min-height:42px}
+@media (orientation:landscape){
+  header,nav,main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
 </style>
 </head>
 <body>
