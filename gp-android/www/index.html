@@ -58,7 +58,7 @@ nav{display:flex;gap:2px;flex-wrap:wrap;background:var(--surface);padding:0 22px
 nav button{background:none;border:none;border-bottom:3px solid transparent;color:var(--muted);padding:15px 15px 12px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:color .15s,background .15s,border-color .15s}
 nav button:hover{color:var(--brand);background:var(--brand-soft)}
 nav button.active{color:var(--brand);border-bottom-color:var(--accent);background:none}
-main{padding:24px 28px 40px;max-width:1360px;margin:0 auto}
+main{padding:24px 28px 40px;max-width:none;width:100%;margin:0 auto}
 .tab{display:none}
 .tab.active{display:block;animation:tabin .18s ease-out}
 @keyframes tabin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
@@ -161,26 +161,6 @@ a{color:var(--brand-2)}
   .fgrid{grid-template-columns:1fr}
   .maprow{grid-template-columns:1fr}
 }
-
-/* ---------- आडवी स्क्रीन (फोन landscape) — कमी उंचीला बसवणे ---------- */
-@media (max-height:520px) and (orientation:landscape){
-  header{padding:8px 18px 10px;gap:4px 10px}
-  header h1{font-size:16px;gap:9px;flex:1 1 auto}
-  header h1 .logo{width:32px;height:32px;font-size:17px;border-radius:9px}
-  header h1 small{display:none}
-  header .sub,#autoSyncNote,#hdrSyncNote{font-size:11px !important}
-  nav{padding:0 10px}
-  nav button{padding:10px 12px 8px;font-size:12.5px}
-  main{padding:12px 16px 24px}
-  .card{padding:14px 16px;margin-bottom:14px}
-  .card h2{margin-bottom:12px;padding-bottom:9px;font-size:15px}
-  .stats{grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px}
-  .stat{padding:14px 8px 12px}
-  .stat .sn{font-size:24px}
-  .stat .sl{font-size:11px}
-  .btn{min-height:38px}
-  .modal-box{max-height:94vh;padding:16px 20px}
-}
 </style>
 <style>
 /* ===== Android (मोबाईल) ===== */
@@ -189,12 +169,151 @@ header{padding:calc(16px + env(safe-area-inset-top,0px)) 16px 16px}
 main{padding-bottom:calc(28px + env(safe-area-inset-bottom,0px))}
 input,select,textarea{font-size:16px !important}
 .btn{min-height:42px}
-@media (orientation:landscape){
-  header,nav,main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-}
 </style>
 </head>
 <body>
+<!-- ===== 🔒 PIN लॉक (उघडताना 6 अंकी PIN) ===== -->
+<style>
+#gpPinLock{position:fixed;inset:0;z-index:2147483000;background:linear-gradient(135deg,#0f2350,#1d3a7a);display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit}
+#gpPinLock .pbox{background:#fff;border-radius:16px;padding:26px 22px;width:100%;max-width:360px;text-align:center;box-shadow:0 14px 40px rgba(0,0,0,.35)}
+#gpPinLock h2{margin:0 0 6px;font-size:20px;color:#0f2350}
+#gpPinLock p{margin:0 0 16px;font-size:14px;line-height:1.6;color:#444}
+#gpPinLock input{width:100%;box-sizing:border-box;font-size:28px;letter-spacing:10px;text-align:center;padding:12px 8px;border:2px solid #c8cfdd;border-radius:10px;outline:none}
+#gpPinLock input.txt{font-size:20px;letter-spacing:3px}
+#gpPinLock input:focus{border-color:#1d3a7a}
+#gpPinLock button{width:100%;margin-top:14px;padding:13px;font-size:16px;font-weight:700;border:0;border-radius:10px;background:#1d3a7a;color:#fff;cursor:pointer}
+#gpPinLock .perr{color:#b42318;font-size:13.5px;min-height:20px;margin-top:10px}
+#gpPinLock .plink{display:block;margin-top:12px;font-size:13.5px;color:#1d3a7a;cursor:pointer;text-decoration:underline}
+#gpPinLock .rec{font-size:22px;font-weight:700;letter-spacing:2px;background:#fff7e0;border:2px dashed #d9a400;border-radius:10px;padding:14px 6px;margin:6px 0 4px;user-select:all}
+</style>
+<div id="gpPinLock" style="display:none"><div class="pbox">
+  <div style="font-size:34px">🔒</div>
+  <h2 id="gpPinTitle"></h2>
+  <p id="gpPinSub"></p>
+  <div id="gpPinRec" class="rec" style="display:none"></div>
+  <input id="gpPinInput" type="password" inputmode="numeric" autocomplete="off" maxlength="6">
+  <div class="perr" id="gpPinErr"></div>
+  <button id="gpPinBtn" type="button">पुढे</button>
+  <a class="plink" id="gpPinForgot" style="display:none">PIN विसरलात?</a>
+  <a class="plink" id="gpPinCancel" style="display:none">रद्द करा</a>
+</div></div>
+<script>
+(function(){
+  var KEY = 'gp_app_pin_v1', FAIL = 'gp_app_pin_fail';
+  var el = function(i){ return document.getElementById(i); };
+  var ov = el('gpPinLock'), inp = el('gpPinInput'), err = el('gpPinErr');
+  var mode = '', tmp = '', pending = null, changing = false;
+
+  /* ---- hash (PBKDF2-SHA256; नसेल तर साधा hash) ---- */
+  function hex(buf){ return Array.prototype.map.call(new Uint8Array(buf), function(b){ return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function rnd(n){ var a = new Uint8Array(n); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach(function(_, i){ a[i] = Math.floor(Math.random() * 256); }); return a; }
+  function hash(secret, salt){
+    var s = String(secret);
+    if(window.crypto && crypto.subtle && crypto.subtle.deriveBits){
+      var enc = new TextEncoder();
+      return crypto.subtle.importKey('raw', enc.encode(s), 'PBKDF2', false, ['deriveBits']).then(function(k){
+        return crypto.subtle.deriveBits({name:'PBKDF2', salt:enc.encode(salt), iterations:150000, hash:'SHA-256'}, k, 256);
+      }).then(hex);
+    }
+    var h = 5381, t = salt + '|' + s + '|' + salt;
+    for(var r = 0; r < 2000; r++){ for(var i = 0; i < t.length; i++){ h = ((h << 5) + h + t.charCodeAt(i)) | 0; } }
+    return Promise.resolve('f' + (h >>> 0).toString(16));
+  }
+  function load(){ try{ return JSON.parse(localStorage.getItem(KEY) || 'null'); }catch(e){ return null; } }
+  function newRecCode(){
+    var al = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', r = rnd(12), out = '';
+    for(var i = 0; i < 12; i++){ out += al[r[i] % al.length]; if(i % 4 === 3 && i < 11) out += '-'; }
+    return out;
+  }
+
+  /* ---- चुकीच्या प्रयत्नांवर थांबा ---- */
+  function failInfo(){ try{ return JSON.parse(localStorage.getItem(FAIL) || '{"n":0,"until":0}'); }catch(e){ return {n:0, until:0}; } }
+  function lockLeft(){ return Math.max(0, Math.ceil((failInfo().until - Date.now()) / 1000)); }
+  function addFail(){
+    var f = failInfo(); f.n++;
+    if(f.n >= 5){ f.until = Date.now() + Math.min(900, 30 * Math.pow(2, f.n - 5)) * 1000; }
+    localStorage.setItem(FAIL, JSON.stringify(f));
+  }
+  function clearFail(){ localStorage.removeItem(FAIL); }
+
+  function ui(title, sub, opts){
+    opts = opts || {};
+    el('gpPinTitle').textContent = title; el('gpPinSub').textContent = sub; err.textContent = '';
+    el('gpPinRec').style.display = opts.rec ? 'block' : 'none'; el('gpPinRec').textContent = opts.rec || '';
+    inp.style.display = opts.noInput ? 'none' : 'block';
+    inp.className = opts.text ? 'txt' : ''; inp.type = opts.text ? 'text' : 'password';
+    inp.maxLength = opts.text ? 14 : 6; inp.setAttribute('inputmode', opts.text ? 'text' : 'numeric');
+    inp.value = ''; el('gpPinBtn').textContent = opts.btn || 'पुढे';
+    el('gpPinForgot').style.display = opts.forgot ? 'block' : 'none';
+    el('gpPinCancel').style.display = changing ? 'block' : 'none';
+    if(!opts.noInput) setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 50);
+  }
+  function show(){ ov.style.display = 'flex'; document.documentElement.style.overflow = 'hidden'; }
+  function hide(){ ov.style.display = 'none'; document.documentElement.style.overflow = ''; changing = false; }
+
+  function go(m){
+    mode = m;
+    if(m === 'unlock') ui('PIN टाका', 'सॉफ्टवेअर उघडण्यासाठी 6 अंकी PIN टाका.', {btn:'उघडा', forgot:true});
+    if(m === 'old')    ui('सध्याचा PIN टाका', 'PIN बदलण्यासाठी आधी सध्याचा PIN टाका.');
+    if(m === 'new1')   ui('नवीन PIN ठरवा', '6 अंकी नवीन PIN टाका.');
+    if(m === 'new2')   ui('PIN पुन्हा टाका', 'खात्रीसाठी तोच 6 अंकी PIN पुन्हा टाका.');
+    if(m === 'rec')    ui('रिकव्हरी कोड', 'PIN सेट करताना दिलेला रिकव्हरी कोड टाका.', {text:true});
+    show();
+  }
+
+  function submit(){
+    var v = inp.value.trim();
+    var data = load();
+    if(mode === 'showrec'){ hide(); return; }
+    if(mode === 'unlock' || mode === 'old' || mode === 'rec'){
+      var left = lockLeft();
+      if(left > 0){ err.textContent = 'खूप चुकीचे प्रयत्न — ' + left + ' सेकंदांनी पुन्हा प्रयत्न करा.'; return; }
+    }
+    if(mode === 'unlock' || mode === 'old'){
+      if(!/^[0-9]{6}$/.test(v)){ err.textContent = '6 अंकी PIN टाका.'; return; }
+      hash(v, data.s).then(function(h){
+        if(h === data.h){ clearFail(); if(mode === 'unlock') hide(); else go('new1'); }
+        else { addFail(); var l = lockLeft(); err.textContent = l > 0 ? 'चुकीचा PIN — ' + l + ' सेकंद थांबा.' : 'चुकीचा PIN. पुन्हा प्रयत्न करा.'; inp.value = ''; }
+      });
+      return;
+    }
+    if(mode === 'rec'){
+      var code = v.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      hash(code, data.rs).then(function(h){
+        if(h === data.rh){ clearFail(); changing = true; go('new1'); }
+        else { addFail(); err.textContent = 'रिकव्हरी कोड चुकीचा आहे.'; inp.value = ''; }
+      });
+      return;
+    }
+    if(mode === 'new1'){
+      if(!/^[0-9]{6}$/.test(v)){ err.textContent = 'फक्त 6 अंक टाका.'; return; }
+      tmp = v; go('new2'); return;
+    }
+    if(mode === 'new2'){
+      if(v !== tmp){ err.textContent = 'दोन्ही PIN जुळत नाहीत. पुन्हा नवीन PIN ठरवा.'; tmp = ''; setTimeout(function(){ go('new1'); err.textContent = 'दोन्ही PIN जुळले नाहीत. पुन्हा प्रयत्न करा.'; }, 900); return; }
+      var s = hex(rnd(16)), rs = hex(rnd(16)), rc = newRecCode();
+      Promise.all([hash(v, s), hash(rc.replace(/-/g, ''), rs)]).then(function(r){
+        localStorage.setItem(KEY, JSON.stringify({s:s, h:r[0], rs:rs, rh:r[1]}));
+        clearFail(); tmp = ''; mode = 'showrec';
+        ui('PIN सेट झाला ✔', 'हा रिकव्हरी कोड कागदावर लिहून सुरक्षित ठेवा. PIN विसरल्यास फक्त हाच कोड उपयोगी पडतो. तो पुन्हा दाखवला जाणार नाही.', {rec:rc, noInput:true, btn:'मी कोड लिहून ठेवला'});
+      });
+    }
+  }
+
+  el('gpPinBtn').onclick = submit;
+  inp.addEventListener('keydown', function(e){ if(e.key === 'Enter') submit(); });
+  inp.addEventListener('input', function(){ if(mode !== 'rec') inp.value = inp.value.replace(/[^0-9]/g, '').slice(0, 6); });
+  el('gpPinForgot').onclick = function(){ go('rec'); };
+  el('gpPinCancel').onclick = function(){ tmp = ''; hide(); };
+
+  window.gpPinChange = function(){ if(!load()){ go('new1'); return; } changing = true; go('old'); };
+
+  /* सुरुवात: PIN नसेल तर आधी ठरवा, असेल तर unlock */
+  go(load() ? 'unlock' : 'new1');
+})();
+</script>
+
+
 
 <!-- ══════════════ APP ══════════════ -->
 <div id="app">
@@ -264,9 +383,9 @@ input,select,textarea{font-size:16px !important}
         <thead><tr>
           <th>#</th><th>WhatsApp</th><th>मोबाईल</th><th>नाव</th><th>गाव</th><th>संपर्क व्यक्ती (पदनाम)</th>
           <th>फॉर्म</th><th>Key</th><th>Payment</th><th>पावती क्र.</th><th>तक्रार</th>
-          <th>रेफरलचे नाव</th><th>रेफरलचा मोबाईल</th>
+          <th>रेफरलचे नाव</th><th>रेफरलचा मोबाईल</th><th>मंजुरी (Demo)</th>
         </tr></thead>
-        <tbody id="masterTable"><tr><td colspan="13" class="no-data">डेटा नाही. सेटिंग्समध्ये Sheets जोडून Sync करा.</td></tr></tbody>
+        <tbody id="masterTable"><tr><td colspan="14" class="no-data">डेटा नाही. सेटिंग्समध्ये Sheets जोडून Sync करा.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -403,6 +522,10 @@ input,select,textarea{font-size:16px !important}
       </div>
     </div>
     <div class="row">
+      <div class="fg" style="flex:1 1 100%"><label>🔒 सुरक्षा — उघडताना 6 अंकी PIN</label><div class="btn btn-grey" onclick="gpPinChange()">🔑 PIN बदला</div></div>
+      <div class="fg" style="flex:1 1 100%"><label>🌐 वेबसाईट Download पेजची लिंक (WhatsApp संदेशात जाते)</label><input type="text" id="cfgSiteUrl" placeholder="https://.../download.html"></div>
+      <div class="fg" style="flex:1 1 100%"><label>✅ मंजुरी Web App URL (Code-Download.gs ची /exec लिंक)</label><input type="text" id="cfgApprUrl" placeholder="https://script.google.com/macros/s/.../exec"></div>
+      <div class="fg" style="flex:1 1 100%"><label>🔑 मंजुरी Secret (Code-Download.gs मधील SECRET)</label><input type="text" id="cfgApprKey" placeholder="SECRET"></div>
       <div class="btn btn-gen" onclick="saveConfigAndSync()">💾 जतन करा + Sync करा</div>
       <label style="display:block;flex:1 1 100%;margin-top:12px;font-size:14px;cursor:pointer"><input type="checkbox" id="autoSyncChk" checked onchange="setAutoSync(this.checked)"> 🔄 Auto Sync — दर 10 सेकंदाला Google Sheet (फॉर्म + तक्रारी) आपोआप Sync</label>
     </div>
@@ -645,6 +768,9 @@ function autoMap(headers, type, rows){
     m.jilha     = guessCol(headers, ['district','jilha','जिल्हा','जिल्ह','zilla','zila'], ['timestamp','date']);
     m.person      = guessCol(headers, ['आपले नाव','अर्जदाराचे नाव','अर्जदार','applicant','person'], ['timestamp','date','referral','रेफरल','reference']);
     m.designation = guessCol(headers, ['पदनाम','designation','हुद्दा'], ['timestamp','date']);
+    m.reqId    = guessCol(headers, ['अर्ज क्रमांक','request id','req id']);
+    m.approval = guessCol(headers, ['मंजुरी','approval']);
+    m.letter   = guessCol(headers, ['पत्र','letter']);
   }
 
   if (type==='complaint'){
@@ -880,6 +1006,9 @@ function applySheetData(type, rows){
 function saveConfigAndSync(){
   config.formUrl = document.getElementById('cfgFormUrl').value.trim();
   config.complaintUrl = document.getElementById('cfgComplaintUrl').value.trim();
+  config.apprUrl = document.getElementById('cfgApprUrl').value.trim();
+  config.siteUrl = document.getElementById('cfgSiteUrl').value.trim();
+  config.apprKey = document.getElementById('cfgApprKey').value.trim();
   lsSet(LS_CONFIG, config);
   document.getElementById('formSheetLink').href = config.formUrl || '#';
   document.getElementById('complaintSheetLink').href = config.complaintUrl || '#';
@@ -1169,7 +1298,7 @@ function buildMasterList(){
   var seq = 0;
   function getRec(mobile, name){
     var key = mobile || ('name:'+normName(name));
-    if(!byMobile[key]) byMobile[key] = {mobile:mobile||'', name:name||'', village:'', taluka:'', jilha:'', person:'', designation:'', formFilled:false, keyGiven:false, keyVal:'', paymentDone:false, amount:0, receiptNo:'', complaint:false, complaintText:'', refName:'', refMobile:'', ts:0, seq:0};
+    if(!byMobile[key]) byMobile[key] = {mobile:mobile||'', name:name||'', village:'', taluka:'', jilha:'', person:'', designation:'', formFilled:false, keyGiven:false, keyVal:'', paymentDone:false, amount:0, receiptNo:'', complaint:false, complaintText:'', refName:'', refMobile:'', reqId:'', approval:'', letter:'', ts:0, seq:0};
     return byMobile[key];
   }
 
@@ -1189,6 +1318,9 @@ function buildMasterList(){
       if(fm.jilha>=0 && fm.jilha!==fm.village && fm.jilha!==fm.taluka && r[fm.jilha]) rec.jilha = r[fm.jilha];
       if(fm.person>=0 && r[fm.person] && !rec.person) rec.person = r[fm.person];
       if(fm.designation>=0 && r[fm.designation] && !rec.designation) rec.designation = r[fm.designation];
+      if(fm.reqId>=0 && r[fm.reqId]) rec.reqId = String(r[fm.reqId]).trim().toUpperCase();
+      if(fm.approval>=0) rec.approval = String(r[fm.approval]||'').trim();
+      if(fm.letter>=0 && r[fm.letter]) rec.letter = r[fm.letter];
       if(fm.refName>=0 && r[fm.refName] && !rec.refName) rec.refName = r[fm.refName];
       if(fm.refMobile>=0 && r[fm.refMobile] && !rec.refMobile) rec.refMobile = normMobile(r[fm.refMobile]) || r[fm.refMobile];
     });
@@ -1419,7 +1551,7 @@ function renderMaster(){
     });
   }
   var tbody = document.getElementById('masterTable');
-  if(!master.length){ tbody.innerHTML='<tr><td colspan="13" class="no-data">डेटा नाही.</td></tr>'; masterView = []; return; }
+  if(!master.length){ tbody.innerHTML='<tr><td colspan="14" class="no-data">डेटा नाही.</td></tr>'; masterView = []; return; }
   masterView = master;
   function badge(v){ return v ? '<span class="badge b-yes">✔ होय</span>' : '<span class="badge b-no">✘ नाही</span>'; }
   tbody.innerHTML = master.map(function(m,i){
@@ -1437,9 +1569,65 @@ function renderMaster(){
       '<td>'+(m.complaint ? '<span class="badge b-no" title="'+(m.complaintText||'').replace(/"/g,'')+'">⚠ आहे</span>' : badge(false))+'</td>'+
       '<td>'+(m.refName||'—')+'</td>'+
       '<td class="mono">'+(m.refMobile||'—')+'</td>'+
+      '<td>'+approvalCell(m, i)+'</td>'+
     '</tr>';
   }).join('');
 }
+/* ============================================================
+   DEMO मंजुरी (Approval) — वेबसाईटवरून आलेले अर्ज इथून मंजूर / नाकारा
+   ============================================================ */
+function sendApprovalWhatsApp(m){
+  if(!m) return;
+  var mob = normMobile(m.mobile);
+  if(!mob){ alert('या अर्जाचा मोबाईल नंबर सापडला नाही.'); return; }
+  var site = config.siteUrl || 'https://grampanchayat-management-system.github.io/software-download/download.html';
+  var msg = 'नमस्कार,\n' +
+    'आपला (' + (m.name || 'ग्रामपंचायत') + ') अर्ज' + (m.reqId ? ' (क्रमांक ' + m.reqId + ')' : '') + ' मंजूर झाला आहे ✅\n\n' +
+    'आपण "ग्रामपंचायत व्यवस्थापन प्रणाली" या सॉफ्टवेअरचे Demo version (७ दिवस मोफत) Download करू शकता.\n\n' +
+    'Download साठी खालील लिंक उघडा, अर्ज क्रमांक व मोबाईल नंबर टाकून "स्थिती तपासा" दाबा:\n' + site + '\n\n' +
+    'काही अडचण असल्यास या WhatsApp वर संपर्क करा.';
+  var b = window.gpBridge;
+  if(b && b.sendTextWhatsApp){
+    b.sendTextWhatsApp({ mobile: mob, name: m.name, message: msg }).then(function(res){
+      if(res && res.ok === false) alert('WhatsApp उघडता आले नाही: ' + (res.error || ''));
+    });
+  } else {
+    window.open('https://wa.me/91' + mob + '?text=' + encodeURIComponent(msg), '_blank');
+  }
+}
+function approvalCell(m, i){
+  if(!m.reqId) return '—';
+  var st = (m.approval || 'Pending').toString().trim();
+  var b = st==='Approved' ? '<span class="badge b-yes">✔ मंजूर</span>'
+        : st==='Rejected' ? '<span class="badge b-no">✘ नाकारले</span>'
+        : '<span class="badge" style="background:#fff3cd;color:#7a5b00">⏳ प्रतीक्षेत</span>';
+  var bs = 'padding:5px 11px;font-size:12px;min-height:0;text-decoration:none;margin:4px 4px 0 0;display:inline-block';
+  var h = b + '<div class="mono" style="font-size:11px;margin-top:3px">#'+m.reqId+'</div><div>';
+  if(m.letter) h += '<a class="btn btn-grey" style="'+bs+'" href="'+String(m.letter).replace(/"/g,'')+'" target="_blank">📄 पत्र</a>';
+  if(st!=='Approved') h += '<button class="btn btn-green" style="'+bs+'" onclick="setApproval('+i+',\'approve\')">✅ मंजूर</button>';
+  if(st==='Approved') h += '<button class="btn btn-grey" style="'+bs+'" onclick="sendApprovalWhatsApp(masterView['+i+'])">📲 संदेश</button>';
+  if(st!=='Rejected') h += '<button class="btn btn-red" style="'+bs+'" onclick="setApproval('+i+',\'reject\')">❌ नाकारा</button>';
+  return h + '</div>';
+}
+function setApproval(i, action){
+  var m = masterView[i];
+  if(!m || !m.reqId) return;
+  if(!config.apprUrl || !config.apprKey){ alert('आधी सेटिंग्स टॅबमध्ये "मंजुरी Web App URL" आणि "मंजुरी Secret" टाका.'); return; }
+  if(!confirm((action==='approve' ? 'मंजूर करायचे?' : 'नाकारायचे?') + '\n' + (m.name||'') + ' (#' + m.reqId + ')')) return;
+  var url = config.apprUrl + '?action=' + action + '&id=' + encodeURIComponent(m.reqId) + '&key=' + encodeURIComponent(config.apprKey);
+  fetch(url, {mode:'no-cors'}).then(function(){
+    var fm = config.formMap || {};
+    if(formCache.rows && fm.reqId>=0 && fm.approval>=0){
+      formCache.rows.forEach(function(r){
+        if(String(r[fm.reqId]).trim().toUpperCase() === m.reqId) r[fm.approval] = (action==='approve' ? 'Approved' : 'Rejected');
+      });
+      lsSet(LS_FORM_CACHE, formCache);
+    }
+    renderMaster();
+    if(action==='approve') sendApprovalWhatsApp(m);
+  }).catch(function(){ alert('मंजुरी पाठवता आली नाही — इंटरनेट तपासा.'); });
+}
+
 function exportMasterCSV(){
   var master = buildMasterList();
   if(!master.length){ alert('डेटा नाही.'); return; }
@@ -1822,6 +2010,9 @@ function downloadFile(content, filename, mime){
 function initAll(){
   document.getElementById('cfgFormUrl').value = config.formUrl || '';
   document.getElementById('cfgComplaintUrl').value = config.complaintUrl || '';
+  document.getElementById('cfgApprUrl').value = config.apprUrl || '';
+  document.getElementById('cfgSiteUrl').value = config.siteUrl || '';
+  document.getElementById('cfgApprKey').value = config.apprKey || '';
   document.getElementById('formSheetLink').href = config.formUrl || '#';
   document.getElementById('complaintSheetLink').href = config.complaintUrl || '#';
   document.getElementById('payNo').value = nextReceiptPreview();
