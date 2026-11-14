@@ -527,7 +527,7 @@ input,select,textarea{font-size:16px !important}
       <div class="fg" style="flex:1 1 100%"><label>✅ मंजुरी Web App URL (Code-Download.gs ची /exec लिंक)</label><input type="text" id="cfgApprUrl" placeholder="https://script.google.com/macros/s/.../exec"></div>
       <div class="fg" style="flex:1 1 100%"><label>🔑 मंजुरी Secret (Code-Download.gs मधील SECRET)</label><input type="text" id="cfgApprKey" placeholder="SECRET"></div>
       <div class="btn btn-gen" onclick="saveConfigAndSync()">💾 जतन करा + Sync करा</div>
-      <label style="display:block;flex:1 1 100%;margin-top:12px;font-size:14px;cursor:pointer"><input type="checkbox" id="autoSyncChk" checked onchange="setAutoSync(this.checked)"> 🔄 Auto Sync — दर 10 सेकंदाला Google Sheet (फॉर्म + तक्रारी) आपोआप Sync</label>
+      <label style="display:block;flex:1 1 100%;margin-top:12px;font-size:14px;cursor:pointer"><input type="checkbox" id="autoSyncChk" onchange="setAutoSync(this.checked)"> 🔄 Auto Sync — दर 10 सेकंदाला Google Sheet (फॉर्म + तक्रारी) आपोआप Sync</label>
     </div>
   </div>
 
@@ -849,10 +849,10 @@ function touchLastSync(){
   if(el) el.textContent = 'शेवटचं Sync: ' + new Date(config.lastSync).toLocaleString('mr-IN');
 }
 function autoSyncEnabled(){
-  try{ return localStorage.getItem('gp_auto_sync') !== '0'; }catch(e){ return true; }
+  try{ return localStorage.getItem('gp_auto_sync2') === '1'; }catch(e){ return false; }
 }
 function setAutoSync(on){
-  try{ localStorage.setItem('gp_auto_sync', on ? '1' : '0'); }catch(e){}
+  try{ localStorage.setItem('gp_auto_sync2', on ? '1' : '0'); }catch(e){}
   autoSyncNote(on ? '🔄 Auto Sync चालू' : '⏸️ Auto Sync बंद', false);
   if(on) autoSyncSoon(500);
 }
