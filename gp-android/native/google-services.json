@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "408691011290",
+    "project_id": "reportnotification-738c7",
+    "storage_bucket": "reportnotification-738c7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:408691011290:android:4f31ed8ad21e48f01fbfe3",
+        "android_client_info": {
+          "package_name": "in.gpsoftware.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBMh7Uj3vafP6Ah5E0CT0718rZdYBy09_A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
