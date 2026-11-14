@@ -31,6 +31,9 @@ jobs:
       - name: Add direct-WhatsApp plugin
         run: python3 native/add_wa_plugin.py
 
+      - name: Push notification (FCM) setup
+        run: python3 native/add_push.py
+
       - run: npx capacitor-assets generate --android
       - run: npx cap sync android
 
