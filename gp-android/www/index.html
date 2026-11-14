@@ -523,6 +523,7 @@ input,select,textarea{font-size:16px !important}
     </div>
     <div class="row">
       <div class="fg" style="flex:1 1 100%"><label>🔒 सुरक्षा — उघडताना 6 अंकी PIN</label><div class="btn btn-grey" onclick="gpPinChange()">🔑 PIN बदला</div></div>
+      <div class="fg" style="flex:1 1 100%"><label>🔔 नवीन अर्जाची Notification (फोनवर)</label><div class="btn btn-grey" onclick="gpEnablePush()">🔔 Notification चालू करा</div><div id="gpPushStatus" style="font-size:13px;margin-top:6px;line-height:1.6"></div></div>
       <div class="fg" style="flex:1 1 100%"><label>🌐 वेबसाईट Download पेजची लिंक (WhatsApp संदेशात जाते)</label><input type="text" id="cfgSiteUrl" placeholder="https://.../download.html"></div>
       <div class="fg" style="flex:1 1 100%"><label>✅ मंजुरी Web App URL (Code-Download.gs ची /exec लिंक)</label><input type="text" id="cfgApprUrl" placeholder="https://script.google.com/macros/s/.../exec"></div>
       <div class="fg" style="flex:1 1 100%"><label>🔑 मंजुरी Secret (Code-Download.gs मधील SECRET)</label><input type="text" id="cfgApprKey" placeholder="SECRET"></div>
@@ -2033,6 +2034,8 @@ function initAll(){
 <script src="lib/html2canvas.min.js"></script>
 <script src="cloudsync.js"></script>
 <script src="mobile-shim.js"></script>
+<script src="push-flag.js"></script>
+<script src="push.js"></script>
 <!-- पेमेंट नोंदवा (ग्राहक मास्टर यादीतून) -->
 <div id="payModal" class="modal-bg" onclick="if(event.target===this) closePayModal()">
   <div class="modal-box">
