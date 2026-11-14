@@ -161,6 +161,33 @@ a{color:var(--brand-2)}
   .fgrid{grid-template-columns:1fr}
   .maprow{grid-template-columns:1fr}
 }
+/* ---------- नवीन अर्ज (एका वेळी एक) ---------- */
+.nr-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.nr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin:14px 0}
+.nr-f{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 12px}
+.nr-f .k{font-size:11.5px;color:var(--muted);font-weight:600}
+.nr-f .v{font-size:15px;font-weight:600;color:var(--text);word-break:break-word}
+.nr-img{width:100%;max-height:520px;object-fit:contain;background:#f3f6fb;border:1px solid var(--line);border-radius:var(--r-sm)}
+.nr-img.zoom{max-height:none}
+.nr-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.nr-actions .btn{flex:1 1 140px;min-height:48px;font-size:15px}
+.nr-empty{text-align:center;padding:40px 10px;color:var(--muted);font-size:16px}
+.btn-wa{background:#25D366;color:#04210f}
+/* ---------- ग्राहक मास्टर यादी — compact (एका नजरेत जास्त ग्राहक) ---------- */
+#tab-master .tbl-wrap{max-height:calc(100vh - 210px);overflow:auto;margin-top:8px}
+#tab-master table{font-size:12px;min-width:0}
+#tab-master th{padding:6px 5px;font-size:11px}
+#tab-master td{padding:3px 5px;line-height:1.2}
+#tab-master td .badge{padding:1px 7px;font-size:10.5px}
+#tab-master td .mono{font-size:11px}
+#tab-master .card{padding:14px 16px}
+#tab-master .search-bar{margin-bottom:0}
+#tab-master .ma{display:flex;align-items:center;gap:3px;white-space:nowrap}
+#tab-master .ma + .ma{margin-top:3px}
+#tab-master .ib{width:26px;height:22px;padding:0;border:none;border-radius:11px;cursor:pointer;font-size:12px;line-height:1;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:#fff}
+#tab-master .ib.wa{background:#25D366}#tab-master .ib.vw{background:var(--brand-2)}#tab-master .ib.pay{background:#15803d}
+#tab-master .ib.ok{background:#15803d}#tab-master .ib.no{background:#d32f2f}#tab-master .ib.doc{background:#6b7a90}#tab-master .ib.msg{background:#25D366}
+#tab-master .wad{font-size:10px;color:var(--muted);margin-left:2px}
 </style>
 <style>
 /* ===== Android (मोबाईल) ===== */
@@ -325,6 +352,7 @@ input,select,textarea{font-size:16px !important}
 
 <nav id="tabNav">
   <button data-tab="dash" class="active">📊 डॅशबोर्ड</button>
+  <button data-tab="newreq">🆕 नवीन अर्ज <span id="nrBadge" class="badge" style="display:none;background:#e53935;color:#fff;margin-left:4px"></span></button>
   <button data-tab="master">👥 ग्राहक मास्टर यादी</button>
   <button data-tab="keygen">🔑 Key Generator</button>
   <button data-tab="pay">🧾 पेमेंट / पावती</button>
@@ -369,6 +397,17 @@ input,select,textarea{font-size:16px !important}
   </div>
 </section>
 
+<!-- ========================================================= NEW REQUESTS -->
+<section id="tab-newreq" class="tab">
+  <div class="card">
+    <div class="nr-head">
+      <h2 style="margin:0">🆕 नवीन अर्ज <small id="nrCount"></small></h2>
+      <div class="btn btn-grey" onclick="syncOne('form',true)">🔄 Sync करा</div>
+    </div>
+    <div id="nrBox"></div>
+  </div>
+</section>
+
 <!-- ========================================================= MASTER LIST -->
 <section id="tab-master" class="tab">
   <div class="card">
@@ -381,7 +420,7 @@ input,select,textarea{font-size:16px !important}
     <div class="tbl-wrap">
       <table>
         <thead><tr>
-          <th>#</th><th>WhatsApp</th><th>मोबाईल</th><th>नाव</th><th>गाव</th><th>संपर्क व्यक्ती (पदनाम)</th>
+          <th>#</th><th>कृती</th><th>मोबाईल</th><th>नाव</th><th>गाव</th><th>संपर्क व्यक्ती (पदनाम)</th>
           <th>फॉर्म</th><th>Key</th><th>Payment</th><th>पावती क्र.</th><th>तक्रार</th>
           <th>रेफरलचे नाव</th><th>रेफरलचा मोबाईल</th><th>मंजुरी (Demo)</th>
         </tr></thead>
@@ -1002,6 +1041,7 @@ function applySheetData(type, rows){
   renderComplaintTable();
   renderDashboard();
   renderMaster();
+  renderNewReq();
 }
 
 function saveConfigAndSync(){
@@ -1470,12 +1510,31 @@ function viewMasterChat(i){
     window.open('https://wa.me/91' + m.mobile, '_blank');
   }
 }
+/* ग्राहक यादीतील सर्व बटणे — फक्त चिन्ह (symbol), दोन ओळींत: ओळ १ = WhatsApp / पहा / पेमेंट + शेवटच्या मेसेजची तारीख, ओळ २ = पत्र / मंजूर / नाकारा */
+function waSentDate(mobile){
+  var ts = waSentAll()[mobile];
+  if(!ts) return '';
+  var d = new Date(ts), p = function(n){ return ('0' + n).slice(-2); };
+  return '<span class="wad">' + p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + String(d.getFullYear()).slice(-2) + '</span>';
+}
 function masterWaCell(m, i){
-  if(!m.mobile || m.mobile.length !== 10) return '<span style="color:var(--muted)">नंबर नाही</span>';
-  return '<div style="white-space:nowrap">'
-    + '<button onclick="sendMasterWhatsApp('+i+')" style="background:#25D366;color:#04210f;border:none;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer">💬 WhatsApp</button> '
-    + '<button onclick="viewMasterChat('+i+')" style="background:var(--brand-2);color:#fff;border:none;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer">👁️ पहा</button>'
-    + '</div><div style="font-size:12px;margin-top:4px">' + waSentText(m.mobile) + '</div>';
+  var ok = m.mobile && m.mobile.length === 10;
+  var l1 = '';
+  if(ok){
+    l1 += '<button class="ib wa" title="WhatsApp संदेश" onclick="sendMasterWhatsApp('+i+')">💬</button>';
+    l1 += '<button class="ib vw" title="चॅट पहा" onclick="viewMasterChat('+i+')">👁️</button>';
+    if(!m.paymentDone) l1 += '<button class="ib pay" title="पेमेंट नोंदवा" onclick="openPayModal('+i+')">💰</button>';
+    l1 += waSentDate(m.mobile);
+  } else l1 = '<span style="color:var(--muted);font-size:11px">नंबर नाही</span>';
+  var l2 = '';
+  if(m.reqId){
+    var st = (m.approval || 'Pending').toString().trim();
+    if(m.letter) l2 += '<a class="ib doc" title="पत्र" href="'+String(m.letter).replace(/"/g,'')+'" target="_blank">📄</a>';
+    if(st!=='Approved') l2 += '<button class="ib ok" title="मंजूर" onclick="setApproval('+i+',\'approve\')">✅</button>';
+    else l2 += '<button class="ib msg" title="मंजुरीचा संदेश" onclick="sendApprovalWhatsApp(masterView['+i+'])">📲</button>';
+    if(st!=='Rejected') l2 += '<button class="ib no" title="नाकारा" onclick="setApproval('+i+',\'reject\')">❌</button>';
+  }
+  return '<div class="ma">' + l1 + '</div>' + (l2 ? '<div class="ma">' + l2 + '</div>' : '');
 }
 
 /* ============================================================
@@ -1565,7 +1624,7 @@ function renderMaster(){
       '<td>'+(m.person ? m.person + (m.designation ? ' <span style="color:var(--muted)">('+m.designation+')</span>' : '') : (m.designation||'—'))+'</td>'+
       '<td>'+badge(m.formFilled)+'</td>'+
       '<td>'+(m.keyGiven ? '<span class="badge b-yes mono">'+m.keyVal+'</span>' : badge(false))+'</td>'+
-      '<td>'+(m.paymentDone ? '<span class="badge b-yes">₹'+m.amount.toLocaleString('en-IN')+'</span>' : badge(false) + ((m.mobile && m.mobile.length===10) ? '<div style="margin-top:6px"><button class="btn btn-green" style="padding:5px 11px;font-size:12px;min-height:0" onclick="openPayModal('+i+')">💰 पेमेंट नोंदवा</button></div>' : ''))+'</td>'+
+      '<td>'+(m.paymentDone ? '<span class="badge b-yes">₹'+m.amount.toLocaleString('en-IN')+'</span>' : badge(false))+'</td>'+
       '<td>'+(m.receiptNo||'—')+'</td>'+
       '<td>'+(m.complaint ? '<span class="badge b-no" title="'+(m.complaintText||'').replace(/"/g,'')+'">⚠ आहे</span>' : badge(false))+'</td>'+
       '<td>'+(m.refName||'—')+'</td>'+
@@ -1602,13 +1661,7 @@ function approvalCell(m, i){
   var b = st==='Approved' ? '<span class="badge b-yes">✔ मंजूर</span>'
         : st==='Rejected' ? '<span class="badge b-no">✘ नाकारले</span>'
         : '<span class="badge" style="background:#fff3cd;color:#7a5b00">⏳ प्रतीक्षेत</span>';
-  var bs = 'padding:5px 11px;font-size:12px;min-height:0;text-decoration:none;margin:4px 4px 0 0;display:inline-block';
-  var h = b + '<div class="mono" style="font-size:11px;margin-top:3px">#'+m.reqId+'</div><div>';
-  if(m.letter) h += '<a class="btn btn-grey" style="'+bs+'" href="'+String(m.letter).replace(/"/g,'')+'" target="_blank">📄 पत्र</a>';
-  if(st!=='Approved') h += '<button class="btn btn-green" style="'+bs+'" onclick="setApproval('+i+',\'approve\')">✅ मंजूर</button>';
-  if(st==='Approved') h += '<button class="btn btn-grey" style="'+bs+'" onclick="sendApprovalWhatsApp(masterView['+i+'])">📲 संदेश</button>';
-  if(st!=='Rejected') h += '<button class="btn btn-red" style="'+bs+'" onclick="setApproval('+i+',\'reject\')">❌ नाकारा</button>';
-  return h + '</div>';
+  return b + ' <span class="mono" style="font-size:10.5px;color:var(--muted)">#'+m.reqId+'</span>';
 }
 function setApproval(i, action){
   var m = masterView[i];
@@ -1627,6 +1680,146 @@ function setApproval(i, action){
     renderMaster();
     if(action==='approve') sendApprovalWhatsApp(m);
   }).catch(function(){ alert('मंजुरी पाठवता आली नाही — इंटरनेट तपासा.'); });
+}
+
+/* ============================================================
+   🆕 नवीन अर्ज — प्रतीक्षेतील अर्ज एका वेळी एक, पूर्ण फॉर्म + पत्र/फोटो.
+   मंजूर / नाकारा केला की तो गायब होतो व पुढचा नवीन अर्ज दिसतो.
+   (ग्राहक मास्टर यादी आधीसारखीच आहे — ती बदललेली नाही)
+   ============================================================ */
+var NR_DONE_KEY = 'gp_nr_done_v1', nrSkip = 0, nrLetters = {}, nrShownId = '', nrBusy = false;
+function nrEsc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function nrDone(){ try{ return JSON.parse(localStorage.getItem(NR_DONE_KEY) || '{}') || {}; }catch(e){ return {}; } }
+function nrMarkDone(id, st){ try{ var d = nrDone(); d[id] = st; localStorage.setItem(NR_DONE_KEY, JSON.stringify(d)); }catch(e){} }
+/* प्रतीक्षेतील अर्ज: अर्ज क्रमांक आहे + मंजुरी ठरलेली नाही. जुना (आधी आलेला) अर्ज आधी. */
+function nrPending(){
+  var fm = config.formMap || {}, rows = formCache.rows || [], done = nrDone(), out = [];
+  if(!(fm.reqId >= 0)) return out;
+  rows.forEach(function(r, idx){
+    var id = String(r[fm.reqId] || '').trim().toUpperCase();
+    if(!id) return;
+    var st = fm.approval >= 0 ? String(r[fm.approval] || '').trim() : '';
+    if(st === 'Approved' || st === 'Rejected' || done[id]) return;
+    out.push({idx: idx, id: id, r: r});
+  });
+  return out;
+}
+function nrBadgeUpdate(n){
+  var b = document.getElementById('nrBadge');
+  if(!b) return;
+  b.style.display = n ? 'inline-block' : 'none';
+  b.textContent = n;
+}
+function renderNewReq(){
+  var box = document.getElementById('nrBox'); if(!box) return;
+  var list = nrPending(), n = list.length;
+  nrBadgeUpdate(n);
+  document.getElementById('nrCount').textContent = n ? ('प्रतीक्षेत: ' + n) : '';
+  if(!n){
+    nrShownId = '';
+    box.innerHTML = '<div class="nr-empty">' + ((formCache.headers && formCache.headers.length)
+      ? '✅ अजून नवीन अर्ज आलेला नाही'
+      : 'सेटिंग्समध्ये Sheet Link टाका आणि Sync करा') + '</div>';
+    return;
+  }
+  if(nrSkip >= n) nrSkip = 0;
+  var cur = list[nrSkip];
+  if(cur.id === nrShownId && box.firstChild) { /* तोच अर्ज — फोटो पुन्हा लोड करू नये */
+    var c = document.getElementById('nrPos'); if(c) c.textContent = (nrSkip+1) + ' / ' + n;
+    return;
+  }
+  nrShownId = cur.id;
+  var fm = config.formMap || {}, h = formCache.headers || [], r = cur.r, fields = '';
+  h.forEach(function(name, i){
+    if(i === fm.letter || i === fm.approval) return;
+    var v = String(r[i] == null ? '' : r[i]).replace(/^'/, '').trim();
+    if(!v) return;
+    var shown = (i === fm.mobile || i === fm.refMobile) && /^\d{10}$/.test(v) ? '<a href="tel:'+v+'">'+v+'</a>' : nrEsc(v);
+    fields += '<div class="nr-f"><div class="k">'+nrEsc(name)+'</div><div class="v">'+shown+'</div></div>';
+  });
+  var letterUrl = fm.letter >= 0 ? String(r[fm.letter] || '').trim() : '';
+  box.innerHTML =
+    '<div class="nr-head"><span class="badge" style="background:#fff3cd;color:#7a5b00">⏳ प्रतीक्षेत</span>' +
+    '<span class="mono" style="font-weight:700">#' + nrEsc(cur.id) + '</span>' +
+    '<span style="color:var(--muted);font-weight:600" id="nrPos">' + (nrSkip+1) + ' / ' + n + '</span></div>' +
+    '<div class="nr-grid">' + fields + '</div>' +
+    '<div><div style="font-weight:700;margin-bottom:6px">📄 अर्जासोबतचे पत्र</div><div id="nrLetter" class="nr-empty" style="padding:18px">⏳ पत्र लोड होत आहे…</div></div>' +
+    '<div class="nr-actions">' +
+      '<button class="btn btn-green" onclick="nrAct(\'approve\')">✅ मंजूर</button>' +
+      '<button class="btn btn-red" onclick="nrAct(\'reject\')">❌ नाकारा</button>' +
+      '<button class="btn btn-wa" onclick="nrWhatsApp()">💬 WhatsApp</button>' +
+      (n > 1 ? '<button class="btn btn-grey" onclick="nrNext()">⏭ पुढचा</button>' : '') +
+    '</div>';
+  nrLoadLetter(cur.id, letterUrl);
+}
+function nrLetterHtml(L, url){
+  var link = url ? '<div style="margin-top:8px"><a class="btn btn-grey" style="text-decoration:none" href="'+nrEsc(url)+'" target="_blank">📄 Drive मध्ये उघडा</a></div>' : '';
+  if(L && L.mime && L.mime.indexOf('image/') === 0)
+    return '<img class="nr-img" alt="पत्र" src="data:'+L.mime+';base64,'+L.data+'" onclick="this.classList.toggle(\'zoom\')">' +
+           '<div style="font-size:12px;color:var(--muted);margin-top:4px">मोठे करण्यासाठी फोटोवर टॅप करा</div>' + link;
+  if(L && L.mime === 'application/pdf')
+    return '<div class="nr-empty" style="padding:14px">📕 हे पत्र PDF आहे</div>' + link;
+  return '<div class="nr-empty" style="padding:14px">पत्र दाखवता आले नाही' + (L && L.error ? ' ('+nrEsc(L.error)+')' : '') + '</div>' + link +
+         '<div style="margin-top:8px"><button class="btn btn-grey" onclick="nrRetry()">🔁 पुन्हा प्रयत्न</button></div>';
+}
+function nrLoadLetter(id, url){
+  var slot = function(){ return document.getElementById('nrLetter'); };
+  var paint = function(L){ if(nrShownId !== id || !slot()) return; slot().className = ''; slot().style.padding = '0'; slot().innerHTML = nrLetterHtml(L, url); };
+  if(nrLetters[id]){ paint(nrLetters[id]); return; }
+  if(!config.apprUrl || !config.apprKey){ paint({error:'सेटिंग्समध्ये "मंजुरी Web App URL" व "Secret" टाका'}); return; }
+  fetch(config.apprUrl + '?action=letter&id=' + encodeURIComponent(id) + '&key=' + encodeURIComponent(config.apprKey))
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(j && j.ok){ nrLetters[id] = j; paint(j); }
+      else paint({error: (j && j.error) || 'उत्तर चुकीचे'});
+    })
+    .catch(function(){ paint({error:'Code.gs नवीन version Deploy केला आहे का / इंटरनेट तपासा'}); });
+}
+function nrRetry(){ nrShownId = ''; renderNewReq(); }
+function nrNext(){ nrSkip++; nrShownId = ''; renderNewReq(); }
+function nrCurrent(){ var l = nrPending(); return l.length ? l[Math.min(nrSkip, l.length-1)] : null; }
+function nrInfo(cur){
+  var fm = config.formMap || {}, r = cur.r;
+  return {
+    id: cur.id,
+    name: fm.name >= 0 ? r[fm.name] : '',
+    mobile: fm.mobile >= 0 ? normMobile(r[fm.mobile]) : ''
+  };
+}
+function nrWhatsApp(){
+  var cur = nrCurrent(); if(!cur) return;
+  var m = nrInfo(cur);
+  if(!m.mobile || m.mobile.length !== 10){ alert('या अर्जाचा मोबाईल नंबर बरोबर सापडला नाही.'); return; }
+  var msg = 'नमस्कार,\nआपला (' + (m.name || 'ग्रामपंचायत') + ') अर्ज (क्रमांक ' + m.id + ') आम्हाला मिळाला आहे. तपासून लवकरच कळवतो. 🙏';
+  var b = window.gpBridge;
+  if(b && b.sendTextWhatsApp){
+    b.sendTextWhatsApp({ mobile: m.mobile, name: m.name, message: msg }).then(function(res){
+      if(res && res.ok === false) alert('WhatsApp उघडता आले नाही: ' + (res.error || ''));
+    });
+  } else window.open('https://wa.me/91' + m.mobile + '?text=' + encodeURIComponent(msg), '_blank');
+}
+function nrAct(action){
+  if(nrBusy) return;
+  var cur = nrCurrent(); if(!cur) return;
+  var m = nrInfo(cur);
+  if(!config.apprUrl || !config.apprKey){ alert('आधी सेटिंग्स टॅबमध्ये "मंजुरी Web App URL" आणि "मंजुरी Secret" टाका.'); return; }
+  if(!confirm((action==='approve' ? 'मंजूर करायचे?' : 'नाकारायचे?') + '\n' + (m.name||'') + ' (#' + m.id + ')')) return;
+  nrBusy = true;
+  var url = config.apprUrl + '?action=' + action + '&id=' + encodeURIComponent(m.id) + '&key=' + encodeURIComponent(config.apprKey);
+  fetch(url, {mode:'no-cors'}).then(function(){
+    var st = action === 'approve' ? 'Approved' : 'Rejected', fm = config.formMap || {};
+    nrMarkDone(m.id, st);                       /* Sheet CSV ला उशीर झाला तरी अर्ज परत दिसणार नाही */
+    if(fm.reqId >= 0 && fm.approval >= 0){
+      formCache.rows.forEach(function(r){ if(String(r[fm.reqId]).trim().toUpperCase() === m.id) r[fm.approval] = st; });
+      lsSet(LS_FORM_CACHE, formCache);
+    }
+    delete nrLetters[m.id];
+    nrShownId = '';
+    renderNewReq(); renderFormTable(); renderMaster(); renderDashboard();
+    gpToast(action === 'approve' ? '✅ मंजूर केले' : '❌ नाकारले');
+    if(action === 'approve') sendApprovalWhatsApp({mobile: m.mobile, name: m.name, reqId: m.id});
+  }).catch(function(){ alert('मंजुरी पाठवता आली नाही — इंटरनेट तपासा.'); })
+    .then(function(){ nrBusy = false; });
 }
 
 function exportMasterCSV(){
@@ -2025,6 +2218,7 @@ function initAll(){
   renderPayTable();
   renderFormTable();
   renderComplaintTable();
+  renderNewReq();
   if (config.formUrl || config.complaintUrl) syncSheets(false);
 }
 </script>
