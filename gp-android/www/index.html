@@ -188,6 +188,15 @@ a{color:var(--brand-2)}
 #tab-master .ib.wa{background:#25D366}#tab-master .ib.vw{background:var(--brand-2)}#tab-master .ib.pay{background:#15803d}
 #tab-master .ib.ok{background:#15803d}#tab-master .ib.no{background:#d32f2f}#tab-master .ib.doc{background:#6b7a90}#tab-master .ib.msg{background:#25D366}
 #tab-master .wad{font-size:10px;color:var(--muted);margin-left:2px}
+/* ---------- Demo ग्रामपंचायती ---------- */
+#tab-demo .tbl-wrap{max-height:calc(100vh - 210px);overflow:auto;margin-top:8px}
+#tab-demo table{min-width:0;font-size:13px}
+#tab-demo td{padding:7px 8px}
+#tab-demo tr.dm-exp td{background:#fff1f0}
+#tab-demo tr.dm-soon td{background:#fff8e6}
+#tab-demo tr.dm-ok td{background:#f0faf3}
+#tab-demo .ib{width:34px;height:28px;border:none;border-radius:14px;cursor:pointer;font-size:15px;background:#25D366;color:#fff;display:inline-flex;align-items:center;justify-content:center}
+#tab-demo .wad{font-size:10.5px;color:var(--muted);margin-left:6px}
 </style>
 <style>
 /* ===== Android (मोबाईल) ===== */
@@ -353,6 +362,7 @@ input,select,textarea{font-size:16px !important}
 <nav id="tabNav">
   <button data-tab="dash" class="active">📊 डॅशबोर्ड</button>
   <button data-tab="newreq">🆕 नवीन अर्ज <span id="nrBadge" class="badge" style="display:none;background:#e53935;color:#fff;margin-left:4px"></span></button>
+  <button data-tab="demo">⏳ Demo यादी <span id="dmBadge" class="badge" style="display:none;background:#e53935;color:#fff;margin-left:4px"></span></button>
   <button data-tab="master">👥 ग्राहक मास्टर यादी</button>
   <button data-tab="keygen">🔑 Key Generator</button>
   <button data-tab="pay">🧾 पेमेंट / पावती</button>
@@ -409,6 +419,20 @@ input,select,textarea{font-size:16px !important}
 </section>
 
 <!-- ========================================================= MASTER LIST -->
+<!-- ========================================================= DEMO LIST -->
+<section id="tab-demo" class="tab">
+  <div class="card">
+    <div class="nr-head">
+      <h2 style="margin:0">⏳ Demo सुरू असलेल्या ग्रामपंचायती <small id="dmCount"></small></h2>
+      <div class="btn btn-grey" onclick="syncOne('form',true)">🔄 Sync करा</div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>#</th><th>नाव</th><th>ग्रामपंचायत</th><th>Demo सुरू</th><th>Demo संपेल</th><th>WhatsApp</th></tr></thead>
+      <tbody id="dmTable"><tr><td colspan="6" class="no-data">सेटिंग्समध्ये Sheet Link टाका आणि Sync करा.</td></tr></tbody>
+    </table></div>
+  </div>
+</section>
+
 <section id="tab-master" class="tab">
   <div class="card">
     <h2>👥 ग्राहक मास्टर यादी <small>मोबाईल नंबरावरून सगळा डेटा जोडलेला</small></h2>
@@ -1042,6 +1066,7 @@ function applySheetData(type, rows){
   renderDashboard();
   renderMaster();
   renderNewReq();
+  renderDemo();
 }
 
 function saveConfigAndSync(){
@@ -1677,6 +1702,7 @@ function setApproval(i, action){
       });
       lsSet(LS_FORM_CACHE, formCache);
     }
+    if(action==='approve') demoMarkStart(m.reqId);
     renderMaster();
     if(action==='approve') sendApprovalWhatsApp(m);
   }).catch(function(){ alert('मंजुरी पाठवता आली नाही — इंटरनेट तपासा.'); });
@@ -1808,20 +1834,95 @@ function nrAct(action){
   var url = config.apprUrl + '?action=' + action + '&id=' + encodeURIComponent(m.id) + '&key=' + encodeURIComponent(config.apprKey);
   fetch(url, {mode:'no-cors'}).then(function(){
     var st = action === 'approve' ? 'Approved' : 'Rejected', fm = config.formMap || {};
-    nrMarkDone(m.id, st);                       /* Sheet CSV ला उशीर झाला तरी अर्ज परत दिसणार नाही */
+    nrMarkDone(m.id, st);
+    if(action === 'approve') demoMarkStart(m.id);                       /* Sheet CSV ला उशीर झाला तरी अर्ज परत दिसणार नाही */
     if(fm.reqId >= 0 && fm.approval >= 0){
       formCache.rows.forEach(function(r){ if(String(r[fm.reqId]).trim().toUpperCase() === m.id) r[fm.approval] = st; });
       lsSet(LS_FORM_CACHE, formCache);
     }
     delete nrLetters[m.id];
     nrShownId = '';
-    renderNewReq(); renderFormTable(); renderMaster(); renderDashboard();
+    renderNewReq(); renderDemo(); renderFormTable(); renderMaster(); renderDashboard();
     gpToast(action === 'approve' ? '✅ मंजूर केले' : '❌ नाकारले');
     if(action === 'approve') sendApprovalWhatsApp({mobile: m.mobile, name: m.name, reqId: m.id});
   }).catch(function(){ alert('मंजुरी पाठवता आली नाही — इंटरनेट तपासा.'); })
     .then(function(){ nrBusy = false; });
 }
 
+/* ============================================================
+   ⏳ Demo सुरू असलेल्या ग्रामपंचायती — मंजूर झालेल्या (ज्यांनी अजून पैसे भरून Key घेतलेली नाही)
+   Demo सुरू = मंजुरीचा दिनांक, संपेल = सुरू + DEMO_DAYS दिवस. 💬 = "Demo संपला, पैसे भरून Key घ्या" संदेश.
+   ============================================================ */
+var DEMO_DAYS = 7, DEMO_START_KEY = 'gp_demo_start_v1', demoView = [];
+function demoStarts(){ try{ return JSON.parse(localStorage.getItem(DEMO_START_KEY) || '{}') || {}; }catch(e){ return {}; } }
+function demoMarkStart(id){ try{ var d = demoStarts(); if(id && !d[id]){ d[id] = Date.now(); localStorage.setItem(DEMO_START_KEY, JSON.stringify(d)); } }catch(e){} }
+function demoDay(ts){ var d = new Date(ts); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
+function demoFmt(ts){ var d = new Date(ts), p = function(n){ return ('0' + n).slice(-2); }; return p(d.getDate()) + '/' + p(d.getMonth()+1) + '/' + d.getFullYear(); }
+function demoList(){
+  var fm = config.formMap || {}, h = formCache.headers || [], rows = formCache.rows || [], out = [];
+  if(!(fm.reqId >= 0 && fm.approval >= 0)) return out;
+  var ci = -1; h.forEach(function(x, i){ if(/मंजुरी\s*दिनांक|approved\s*at/i.test(String(x))) ci = i; });
+  var bought = {}; /* ज्यांनी पैसे भरले / Key घेतली ते आता Demo मध्ये नाहीत */
+  try{ buildMasterList().forEach(function(m){ if(m.mobile && (m.paymentDone || m.keyGiven)) bought[m.mobile] = m; }); }catch(e){}
+  var loc = demoStarts(), today = demoDay(Date.now()), DAY = 86400000, seen = {};
+  rows.forEach(function(r){
+    var id = String(r[fm.reqId] || '').trim().toUpperCase();
+    var mob = fm.mobile >= 0 ? normMobile(r[fm.mobile]) : '';
+    var bm = mob ? bought[mob] : null;     /* Key घेतलेले / पैसे भरलेले — तेही यादीत */
+    if(String(r[fm.approval] || '').trim() !== 'Approved' && !bm) return;
+    if(mob){ if(seen[mob]) return; seen[mob] = 1; }
+    var st = (ci >= 0 ? parseAnyDate(r[ci]) : 0) || loc[id] || (fm.date >= 0 ? parseAnyDate(r[fm.date]) : 0);
+    if(!st) return;
+    var sd = demoDay(st), ed = sd + DEMO_DAYS * DAY;
+    out.push({ id: id, mobile: mob,
+      person: fm.person >= 0 ? String(r[fm.person] || '').trim() : '',
+      gp: fm.name >= 0 ? String(r[fm.name] || '').trim() : '',
+      start: sd, end: ed, left: Math.round((ed - today) / DAY),
+      bought: bm ? { key: bm.keyVal || '', paid: !!bm.paymentDone, amount: bm.paymentDone ? bm.amount : 0 } : null });
+  });
+  out.sort(function(a, b){ if(!!a.bought !== !!b.bought) return a.bought ? 1 : -1; return a.end - b.end; });   /* संपलेले / लवकर संपणारे वर, Key घेतलेले शेवटी */
+  return out;
+}
+function renderDemo(){
+  var tb = document.getElementById('dmTable'); if(!tb) return;
+  var list = demoList(); demoView = list;
+  var expired = list.filter(function(d){ return !d.bought && d.left < 0; }).length, keyed = list.filter(function(d){ return d.bought; }).length;
+  var b = document.getElementById('dmBadge');
+  if(b){ b.style.display = expired ? 'inline-block' : 'none'; b.textContent = expired; b.title = 'Demo संपलेले'; }
+  var c = document.getElementById('dmCount'); if(c) c.textContent = list.length ? ('एकूण: ' + list.length + (expired ? ' | संपलेले: ' + expired : '') + (keyed ? ' | Key घेतलेले: ' + keyed : '')) : '';
+  if(!list.length){
+    tb.innerHTML = '<tr><td colspan="6" class="no-data">' + ((formCache.headers && formCache.headers.length) ? 'सध्या कोणतीही Demo ग्रामपंचायत नाही' : 'सेटिंग्समध्ये Sheet Link टाका आणि Sync करा.') + '</td></tr>';
+    return;
+  }
+  tb.innerHTML = list.map(function(d, i){
+    var cls = d.bought ? 'dm-ok' : d.left < 0 ? 'dm-exp' : (d.left <= 2 ? 'dm-soon' : '');
+    var tag = d.bought ? '<span class="badge b-yes">🔑 Key घेतली</span>' + (d.bought.key ? ' <span class="mono" style="font-size:11px">' + nrEsc(d.bought.key) + '</span>' : '') + (d.bought.paid && d.bought.amount ? ' <span class="badge b-yes">₹' + d.bought.amount.toLocaleString('en-IN') + '</span>' : '')
+            : d.left < 0 ? '<span class="badge b-no">⌛ संपला (' + (-d.left) + ' दिवसांपूर्वी)</span>'
+            : d.left === 0 ? '<span class="badge" style="background:#fff3cd;color:#7a5b00">आज संपतो</span>'
+            : '<span class="badge b-yes">' + d.left + ' दिवस बाकी</span>';
+    var wa = d.bought ? '<span style="color:var(--muted)">—</span>' : d.mobile && d.mobile.length === 10
+      ? '<button class="ib" title="Demo संपल्याचा WhatsApp संदेश" onclick="demoWhatsApp(' + i + ')">💬</button>' + waSentDate(d.mobile)
+      : '<span style="color:var(--muted);font-size:11px">नंबर नाही</span>';
+    return '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td>' + nrEsc(d.person || '—') + '</td><td>' + nrEsc(d.gp || '—') + '</td><td>' + demoFmt(d.start) + '</td><td>' + demoFmt(d.end) + ' ' + tag + '</td><td style="white-space:nowrap">' + wa + '</td></tr>';
+  }).join('');
+}
+function demoWhatsApp(i){
+  var d = demoView[i]; if(!d || d.bought) return;
+  if(!d.mobile || d.mobile.length !== 10){ alert('मोबाईल नंबर बरोबर सापडला नाही.'); return; }
+  if(d.left >= 0 && !confirm('या ग्रामपंचायतीचा Demo अजून चालू आहे (' + demoFmt(d.end) + ' पर्यंत). तरीही "Demo संपला" संदेश पाठवायचा?')) return;
+  var msg = 'नमस्कार' + (d.person ? ' ' + d.person : '') + ', 🙏\n\n' +
+    (d.gp ? '"' + d.gp + '" ग्रामपंचायतीचा ' : 'आपला ') + '"ग्रामपंचायत व्यवस्थापन प्रणाली" सॉफ्टवेअरचा Demo कालावधी (' + demoFmt(d.start) + ' ते ' + demoFmt(d.end) + ') संपला आहे.\n\n' +
+    'सॉफ्टवेअर पुढे वापरायचे असल्यास कृपया पैसे भरून Key घ्या. 🔑\n\n' +
+    'पैसे भरण्यासाठी / काही अडचण असल्यास या WhatsApp वर संपर्क करा. धन्यवाद! 🙏';
+  var done = function(res){
+    if(res && res.ok === false){ alert('WhatsApp उघडता आले नाही: ' + (res.error || '')); return; }
+    waSentMark(d.mobile); renderDemo();
+  };
+  var b = window.gpBridge;
+  if(b && b.sendTextWhatsApp) b.sendTextWhatsApp({ mobile: d.mobile, name: d.person || d.gp, message: msg }).then(done);
+  else { window.open('https://wa.me/91' + d.mobile + '?text=' + encodeURIComponent(msg), '_blank'); done({ ok: true }); }
+}
+setInterval(function(){ try{ renderDemo(); }catch(e){} }, 3000);
 function exportMasterCSV(){
   var master = buildMasterList();
   if(!master.length){ alert('डेटा नाही.'); return; }
@@ -2219,6 +2320,7 @@ function initAll(){
   renderFormTable();
   renderComplaintTable();
   renderNewReq();
+  renderDemo();
   if (config.formUrl || config.complaintUrl) syncSheets(false);
 }
 </script>
